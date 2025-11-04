@@ -1,5 +1,5 @@
 interface RoomHeaderProps {
-	roomName: string;
+	roomName: string; // Actually userName now
 	onEndCall: () => void;
 }
 
@@ -8,9 +8,9 @@ export function RoomHeader({ roomName, onEndCall }: RoomHeaderProps) {
 		<div className='bg-white rounded-lg shadow-lg p-6 mb-6 flex items-center justify-between'>
 			<div>
 				<h1 className='text-2xl font-bold text-gray-800 mb-2'>
-					LiveKit Voice Room
+					Therapy Session
 				</h1>
-				<p className='text-gray-600'>Room: {roomName}</p>
+				<p className='text-gray-600'>Patient: {roomName}</p>
 			</div>
 			<button
 				onClick={onEndCall}
@@ -28,7 +28,7 @@ export function RoomHeader({ roomName, onEndCall }: RoomHeaderProps) {
 						clipRule='evenodd'
 					/>
 				</svg>
-				End Call
+				End Session
 			</button>
 		</div>
 	);

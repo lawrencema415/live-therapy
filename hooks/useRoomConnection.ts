@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { Room, RoomEvent, createLocalAudioTrack } from 'livekit-client';
-import type { TranscriptMessage, TextStreamReader, ParticipantIdentity } from '@/types/room';
+import type { TranscriptMessage, TextStreamReader, ParticipantIdentity, StoredTranscript } from '@/types/room';
 import { storeTranscriptsInStorage, loadTranscriptsFromStorage } from '@/utils/transcriptStorage';
 
 interface UseRoomConnectionProps {
@@ -18,19 +18,28 @@ export function useRoomConnection({
 	const [isConnecting, setIsConnecting] = useState(false);
 	const roomRef = useRef<Room | null>(null);
 
-	const connectToRoom = useCallback(async (roomName: string) => {
-		if (!roomName.trim() || isConnecting) {
+	const connectToRoom = useCallback(async (userName: string, previousTranscripts: StoredTranscript[] = []) => {
+		if (!userName.trim() || isConnecting) {
 			return;
 		}
 
 		setIsConnecting(true);
 		try {
-			const identity = 'user-' + Math.floor(Math.random() * 1000);
+			// Use userName as identity
+			const identity = userName.trim();
 
-			// Get token from API
-			const res = await fetch(
-				`/api/token?identity=${identity}&roomName=${roomName.trim()}`
-			);
+			// Get token from API with userName and previous transcripts
+			const tokenParams = new URLSearchParams({
+				identity: identity,
+				userName: identity,
+			});
+
+			// Add previous transcripts as JSON if available
+			if (previousTranscripts.length > 0) {
+				tokenParams.append('previousTranscripts', JSON.stringify(previousTranscripts));
+			}
+
+			const res = await fetch(`/api/token?${tokenParams.toString()}`);
 
 			if (!res.ok) {
 				const errorData = await res
@@ -56,7 +65,8 @@ export function useRoomConnection({
 			}
 
 			console.log('Connecting to LiveKit:', livekitUrl);
-			console.log('Room name:', roomName.trim());
+			console.log('User name:', userName.trim());
+			console.log('Previous transcripts:', previousTranscripts.length);
 
 			const currentRoom = new Room();
 			roomRef.current = currentRoom;
@@ -67,6 +77,29 @@ export function useRoomConnection({
 				localParticipant: currentRoom.localParticipant.identity,
 				numParticipants: currentRoom.numParticipants,
 			});
+
+			// Set participant attributes with userName and previous transcripts for agent to access
+			// Always set userName so agent can identify the user
+			try {
+				const attributes: Record<string, string> = {
+					userName: userName.trim(),
+				};
+				
+				// Add previous transcripts if available
+				if (previousTranscripts.length > 0) {
+					attributes.transcripts = JSON.stringify(previousTranscripts);
+					console.log(`[RoomConnection] ✓ Setting ${previousTranscripts.length} previous transcripts in participant attributes`);
+					console.log(`[RoomConnection] Sample transcripts:`, previousTranscripts.slice(0, 2).map(t => `${t.role}: ${t.text.substring(0, 30)}...`));
+				} else {
+					console.log(`[RoomConnection] No previous transcripts to send`);
+				}
+				
+				await currentRoom.localParticipant.setAttributes(attributes);
+				console.log(`[RoomConnection] ✓ Set userName attribute: "${userName.trim()}"`);
+				console.log(`[RoomConnection] Participant identity: ${currentRoom.localParticipant.identity}`);
+			} catch (error) {
+				console.error('[RoomConnection] ✗ Error setting participant attributes:', error);
+			}
 
 			// Listen for room disconnect events
 			currentRoom.on(RoomEvent.Disconnected, () => {

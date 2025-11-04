@@ -1,15 +1,17 @@
 interface JoinScreenProps {
-	roomName: string;
-	onRoomNameChange: (name: string) => void;
+	userName: string;
+	onUserNameChange: (name: string) => void;
 	onJoin: () => void;
 	isConnecting: boolean;
+	hasPreviousSession?: boolean;
 }
 
 export function JoinScreen({
-	roomName,
-	onRoomNameChange,
+	userName,
+	onUserNameChange,
 	onJoin,
 	isConnecting,
+	hasPreviousSession = false,
 }: JoinScreenProps) {
 	return (
 		<div className='min-h-screen bg-gray-50 flex items-center justify-center p-6'>
@@ -18,22 +20,30 @@ export function JoinScreen({
 					Live Therapy
 				</h1>
 				<p className='text-gray-600 text-center mb-8'>
-					join a live therapy session with a therapist
+					Join a live therapy session with an AI therapist
 				</p>
+
+				{hasPreviousSession && (
+					<div className='mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg'>
+						<p className='text-sm text-blue-800'>
+							Welcome back! Your previous conversations will be remembered.
+						</p>
+					</div>
+				)}
 
 				<div className='space-y-4'>
 					<div>
 						<label
-							htmlFor='roomName'
+							htmlFor='userName'
 							className='block text-sm font-medium text-gray-700 mb-2'
 						>
-							Name
+							Your Name
 						</label>
 						<input
-							id='roomName'
+							id='userName'
 							type='text'
-							value={roomName}
-							onChange={(e) => onRoomNameChange(e.target.value)}
+							value={userName}
+							onChange={(e) => onUserNameChange(e.target.value)}
 							onKeyDown={(e) => {
 								if (e.key === 'Enter' && !isConnecting) {
 									onJoin();
@@ -47,7 +57,7 @@ export function JoinScreen({
 
 					<button
 						onClick={onJoin}
-						disabled={isConnecting || !roomName.trim()}
+						disabled={isConnecting || !userName.trim()}
 						className='w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center justify-center'
 					>
 						{isConnecting ? (
@@ -75,7 +85,7 @@ export function JoinScreen({
 								Connecting...
 							</>
 						) : (
-							'Talk to your AI therapist'
+							'Start Therapy Session'
 						)}
 					</button>
 				</div>
