@@ -30,9 +30,13 @@ export async function GET(request: NextRequest) {
 		}
 	}
 
-	// Use a consistent room name for therapy sessions (single room per user)
-	// Or use userName as room name for consistency
-	const roomName = `therapy-${userName.toLowerCase().trim()}`;
+	// Generate unique room name per session to ensure fresh agent jobs
+	// Each connection gets a new room, which triggers a new agent job
+	// We still use userName as identity for transcript tracking
+	const sessionId = Date.now();
+	const roomName = `therapy-${userName.toLowerCase().trim()}-${sessionId}`;
+	
+	console.log(`[Token] Generated room name: ${roomName} for user: ${userName}`);
 
 	const at = new AccessToken(
 		process.env.LIVEKIT_API_KEY!,

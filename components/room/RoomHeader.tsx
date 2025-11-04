@@ -1,15 +1,47 @@
 interface RoomHeaderProps {
 	roomName: string; // Actually userName now
 	onEndCall: () => void;
+	isAgentConnected?: boolean;
 }
 
-export function RoomHeader({ roomName, onEndCall }: RoomHeaderProps) {
+export function RoomHeader({
+	roomName,
+	onEndCall,
+	isAgentConnected = false,
+}: RoomHeaderProps) {
 	return (
 		<div className='bg-white rounded-lg shadow-lg p-6 mb-6 flex items-center justify-between'>
-			<div>
-				<h1 className='text-2xl font-bold text-gray-800 mb-2'>
-					Therapy Session
-				</h1>
+			<div className='flex-1'>
+				<div className='flex items-center gap-3 mb-2'>
+					<h1 className='text-2xl font-bold text-gray-800'>Therapy Session</h1>
+					{isAgentConnected ? (
+						<span className='flex items-center gap-1.5 px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium'>
+							<svg className='w-3 h-3' fill='currentColor' viewBox='0 0 20 20'>
+								<path
+									fillRule='evenodd'
+									d='M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z'
+									clipRule='evenodd'
+								/>
+							</svg>
+							AI Connected
+						</span>
+					) : (
+						<span className='flex items-center gap-1.5 px-2.5 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium'>
+							<svg
+								className='w-3 h-3 animate-pulse'
+								fill='currentColor'
+								viewBox='0 0 20 20'
+							>
+								<path
+									fillRule='evenodd'
+									d='M10 18a8 8 0 100-16 8 8 0 000 16zM9.555 7.168A1 1 0 008 8v4a1 1 0 001.555.832l3-2a1 1 0 000-1.664l-3-2z'
+									clipRule='evenodd'
+								/>
+							</svg>
+							Connecting...
+						</span>
+					)}
+				</div>
 				<p className='text-gray-600'>Patient: {roomName}</p>
 			</div>
 			<button

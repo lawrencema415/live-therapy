@@ -1,7 +1,7 @@
 // Custom hook for managing LiveKit room connection
 
 import { useState, useRef, useCallback } from 'react';
-import { Room, RoomEvent, createLocalAudioTrack } from 'livekit-client';
+import { Room, RoomEvent, createLocalAudioTrack, ParticipantKind } from 'livekit-client';
 import type { TranscriptMessage, TextStreamReader, ParticipantIdentity, StoredTranscript } from '@/types/room';
 import { storeTranscriptsInStorage, loadTranscriptsFromStorage } from '@/utils/transcriptStorage';
 
@@ -16,6 +16,8 @@ export function useRoomConnection({
 }: UseRoomConnectionProps) {
 	const [isConnected, setIsConnected] = useState(false);
 	const [isConnecting, setIsConnecting] = useState(false);
+	const [isAgentConnected, setIsAgentConnected] = useState(false);
+	const [isWaitingForAgent, setIsWaitingForAgent] = useState(false);
 	const roomRef = useRef<Room | null>(null);
 
 	const connectToRoom = useCallback(async (userName: string, previousTranscripts: StoredTranscript[] = []) => {
@@ -78,27 +80,32 @@ export function useRoomConnection({
 				numParticipants: currentRoom.numParticipants,
 			});
 
-			// Set participant attributes with userName and previous transcripts for agent to access
-			// Always set userName so agent can identify the user
+			// Send user info via data track (since setAttributes requires permissions)
+			// The agent can read this from the data track or use identity (which is userName)
 			try {
-				const attributes: Record<string, string> = {
-					userName: userName.trim(),
-				};
-				
-				// Add previous transcripts if available
 				if (previousTranscripts.length > 0) {
-					attributes.transcripts = JSON.stringify(previousTranscripts);
-					console.log(`[RoomConnection] ✓ Setting ${previousTranscripts.length} previous transcripts in participant attributes`);
+					const userInfoData = {
+						type: 'user_info',
+						userName: userName.trim(),
+						previousTranscripts: previousTranscripts,
+					};
+					
+					const data = new TextEncoder().encode(JSON.stringify(userInfoData));
+					await currentRoom.localParticipant.publishData(data, {
+						reliable: true,
+						topic: 'user_info',
+					});
+					
+					console.log(`[RoomConnection] ✓ Sent user info via data track: "${userName.trim()}" with ${previousTranscripts.length} transcripts`);
 					console.log(`[RoomConnection] Sample transcripts:`, previousTranscripts.slice(0, 2).map(t => `${t.role}: ${t.text.substring(0, 30)}...`));
 				} else {
-					console.log(`[RoomConnection] No previous transcripts to send`);
+					console.log(`[RoomConnection] User identity: "${userName.trim()}" (no previous transcripts)`);
 				}
 				
-				await currentRoom.localParticipant.setAttributes(attributes);
-				console.log(`[RoomConnection] ✓ Set userName attribute: "${userName.trim()}"`);
 				console.log(`[RoomConnection] Participant identity: ${currentRoom.localParticipant.identity}`);
 			} catch (error) {
-				console.error('[RoomConnection] ✗ Error setting participant attributes:', error);
+				console.error('[RoomConnection] ✗ Error sending user info:', error);
+				// This is not critical - agent can still use identity as userName
 			}
 
 			// Listen for room disconnect events
@@ -140,6 +147,144 @@ export function useRoomConnection({
 			// Register text stream handler for transcriptions
 			setupTranscriptHandlers(currentRoom, onTranscriptReceived);
 
+			// Check for agent connection
+			let agentCheckInterval: NodeJS.Timeout | null = null;
+			const checkAgentConnection = () => {
+				// Safety check - ensure room and participants are available
+				if (!currentRoom || !currentRoom.remoteParticipants) {
+					return;
+				}
+
+				try {
+					const remoteParticipants = Array.from(currentRoom.remoteParticipants.values());
+					const localIdentity = currentRoom.localParticipant?.identity || '';
+					
+					// Check for AGENT kind participants (proper way to detect agents)
+					const hasAgent = remoteParticipants.length > 0 && remoteParticipants.some(
+						(p) => {
+							if (!p) return false;
+							
+							const pIdentity = p.identity || '';
+							const isAgent = p.kind === ParticipantKind.AGENT;
+							
+							// Also check if it's not the local user (extra safety)
+							const isNotLocalUser = pIdentity !== localIdentity && 
+							                       pIdentity !== userName.trim() && 
+							                       pIdentity.length > 0;
+							
+							// Check if participant has audio tracks (agent typically publishes audio)
+							// Safely check audio tracks - may not exist immediately
+							let hasAudioTracks = false;
+							try {
+								if (p.audioTracks) {
+									hasAudioTracks = Array.from(p.audioTracks.values()).length > 0;
+								}
+							} catch (e) {
+								// Audio tracks not available yet, that's okay
+							}
+							
+							// Log for debugging
+							if (isNotLocalUser) {
+								console.log(`[RoomConnection] Found remote participant: ${pIdentity}, kind: ${p.kind}, isAgent: ${isAgent}, audio tracks: ${hasAudioTracks}`);
+							}
+							
+							// Primary check: must be AGENT kind
+							// Secondary check: must not be local user
+							return isAgent && isNotLocalUser;
+						}
+					);
+				
+					if (hasAgent) {
+						setIsAgentConnected(true);
+						setIsWaitingForAgent(false);
+						console.log('[RoomConnection] ✓ Agent detected in room');
+						if (agentCheckInterval) {
+							clearInterval(agentCheckInterval);
+							agentCheckInterval = null;
+						}
+					} else {
+						// Only set waiting state if we're still connected
+						if (currentRoom.state === 'connected') {
+							setIsAgentConnected(false);
+							setIsWaitingForAgent(true);
+						}
+					}
+				} catch (error) {
+					console.error('[RoomConnection] Error checking agent connection:', error);
+					// Don't throw - just log and continue
+				}
+			};
+
+			// Check immediately
+			checkAgentConnection();
+
+			// Listen for participant connected events to detect agent
+			const participantConnectedHandler = (participant: any) => {
+				if (!participant) return;
+				const pKind = participant.kind || 'unknown';
+				const pIdentity = participant.identity || 'unknown';
+				console.log(`[RoomConnection] Participant connected: ${pIdentity}, kind: ${pKind}`);
+				
+				// If this is an AGENT participant, check immediately
+				if (pKind === ParticipantKind.AGENT) {
+					console.log('[RoomConnection] ✓ AGENT participant detected!');
+					setTimeout(() => {
+						checkAgentConnection();
+					}, 100);
+				} else {
+					// For other participants, also check (might help detect agent)
+					setTimeout(() => {
+						checkAgentConnection();
+					}, 100);
+				}
+			};
+
+			const participantDisconnectedHandler = (participant: any) => {
+				if (!participant) return;
+				console.log('[RoomConnection] Participant disconnected:', participant.identity || 'unknown');
+				checkAgentConnection();
+			};
+
+			currentRoom.on(RoomEvent.ParticipantConnected, participantConnectedHandler);
+			currentRoom.on(RoomEvent.ParticipantDisconnected, participantDisconnectedHandler);
+
+			// Poll for agent connection more frequently initially, then less frequently
+			let pollCount = 0;
+			agentCheckInterval = setInterval(() => {
+				pollCount++;
+				checkAgentConnection();
+				
+				// Log every 5 seconds
+				if (pollCount % 5 === 0) {
+					try {
+						if (currentRoom && currentRoom.remoteParticipants) {
+							const remoteParticipants = Array.from(currentRoom.remoteParticipants.values());
+							console.log(`[RoomConnection] Agent check (${pollCount}s): ${remoteParticipants.length} remote participants`);
+						}
+					} catch (error) {
+						console.error('[RoomConnection] Error logging participant count:', error);
+					}
+				}
+			}, 1000);
+
+			// Keep checking indefinitely (don't stop after timeout)
+			// The agent should connect when user joins, but might take time
+			// Only stop checking if we disconnect or agent is found
+			currentRoom.on(RoomEvent.Disconnected, () => {
+				if (agentCheckInterval) {
+					clearInterval(agentCheckInterval);
+					agentCheckInterval = null;
+				}
+			});
+
+			// Log warning after 30 seconds but keep checking
+			setTimeout(() => {
+				if (!isAgentConnected) {
+					console.warn('[RoomConnection] Agent has not connected after 30 seconds, continuing to wait...');
+					console.warn('[RoomConnection] Agent should connect automatically when participant joins');
+				}
+			}, 30000);
+
 			setIsConnected(true);
 		} catch (error) {
 			console.error('Error connecting to room:', error);
@@ -154,15 +299,32 @@ export function useRoomConnection({
 
 	const disconnect = useCallback(async () => {
 		if (roomRef.current) {
-			await roomRef.current.disconnect();
-			roomRef.current = null;
+			try {
+				console.log('[RoomConnection] Disconnecting from room and ending agent session...');
+				
+				// Disconnect from room - this will trigger agent job to end
+				// When all participants leave, the agent job ends automatically
+				await roomRef.current.disconnect();
+				console.log('[RoomConnection] Successfully disconnected from room');
+				
+				// Give a moment for cleanup
+				await new Promise(resolve => setTimeout(resolve, 100));
+			} catch (error) {
+				console.error('[RoomConnection] Error during disconnect:', error);
+			} finally {
+				roomRef.current = null;
+			}
 		}
 		setIsConnected(false);
+		setIsAgentConnected(false);
+		setIsWaitingForAgent(false);
 	}, []);
 
 	return {
 		isConnected,
 		isConnecting,
+		isAgentConnected,
+		isWaitingForAgent,
 		connectToRoom,
 		disconnect,
 		getRoom: () => roomRef.current,

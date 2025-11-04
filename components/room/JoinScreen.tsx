@@ -3,6 +3,7 @@ interface JoinScreenProps {
 	onUserNameChange: (name: string) => void;
 	onJoin: () => void;
 	isConnecting: boolean;
+	isWaitingForAgent?: boolean;
 	hasPreviousSession?: boolean;
 }
 
@@ -11,6 +12,7 @@ export function JoinScreen({
 	onUserNameChange,
 	onJoin,
 	isConnecting,
+	isWaitingForAgent = false,
 	hasPreviousSession = false,
 }: JoinScreenProps) {
 	return (
@@ -60,7 +62,7 @@ export function JoinScreen({
 						disabled={isConnecting || !userName.trim()}
 						className='w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center justify-center'
 					>
-						{isConnecting ? (
+						{isConnecting || isWaitingForAgent ? (
 							<>
 								<svg
 									className='animate-spin -ml-1 mr-3 h-5 w-5 text-white'
@@ -82,12 +84,19 @@ export function JoinScreen({
 										d='M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z'
 									></path>
 								</svg>
-								Connecting...
+								{isWaitingForAgent
+									? 'Waiting for AI therapist...'
+									: 'Connecting...'}
 							</>
 						) : (
 							'Start Therapy Session'
 						)}
 					</button>
+					{isWaitingForAgent && (
+						<p className='text-sm text-gray-500 text-center mt-2'>
+							Connecting to AI therapist, please wait...
+						</p>
+					)}
 				</div>
 			</div>
 		</div>

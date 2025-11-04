@@ -20,15 +20,22 @@ export default function TherapyPage() {
 	const transcriptHook = useTranscripts();
 
 	// Get room reference for transcript storage
-	const { isConnected, isConnecting, connectToRoom, disconnect, getRoom } =
-		useRoomConnection({
-			onTranscriptsUpdate: (transcripts) => {
-				transcriptHook.setTranscriptsFromStorage(transcripts);
-			},
-			onTranscriptReceived: (message) => {
-				transcriptHook.addTranscript(message);
-			},
-		});
+	const {
+		isConnected,
+		isConnecting,
+		isAgentConnected,
+		isWaitingForAgent,
+		connectToRoom,
+		disconnect,
+		getRoom,
+	} = useRoomConnection({
+		onTranscriptsUpdate: (transcripts) => {
+			transcriptHook.setTranscriptsFromStorage(transcripts);
+		},
+		onTranscriptReceived: (message) => {
+			transcriptHook.addTranscript(message);
+		},
+	});
 
 	// Update transcript hook when room changes
 	useEffect(() => {
@@ -104,6 +111,7 @@ export default function TherapyPage() {
 				onUserNameChange={setUserName}
 				onJoin={handleJoin}
 				isConnecting={isConnecting}
+				isWaitingForAgent={isWaitingForAgent}
 				hasPreviousSession={hasPreviousSession}
 			/>
 		);
@@ -113,7 +121,11 @@ export default function TherapyPage() {
 	return (
 		<div className='min-h-screen bg-gray-50 p-6'>
 			<div className='max-w-4xl mx-auto'>
-				<RoomHeader roomName={userName} onEndCall={handleEndCall} />
+				<RoomHeader
+					roomName={userName}
+					onEndCall={handleEndCall}
+					isAgentConnected={isAgentConnected}
+				/>
 				<TranscriptList transcripts={transcriptHook.transcripts} />
 			</div>
 		</div>
