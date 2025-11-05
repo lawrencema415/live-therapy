@@ -8,7 +8,7 @@ export function TranscriptMessageComponent({
 	message,
 }: TranscriptMessageProps) {
 	const isAgent = message.speaker.startsWith('agent');
-	const displayName = isAgent ? 'Agent' : 'You';
+	const displayName = isAgent ? 'Therapist' : 'You';
 
 	return (
 		<div className={`flex ${isAgent ? 'justify-start' : 'justify-end'}`}>

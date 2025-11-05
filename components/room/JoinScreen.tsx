@@ -22,20 +22,22 @@ export function JoinScreen({
 	onRememberMeChange,
 }: JoinScreenProps) {
 	return (
-		<div className='min-h-screen flex items-center justify-center p-6'>
-			<div className='bg-white rounded-lg shadow-lg p-8 max-w-md w-full'>
-				<h1 className='text-3xl font-bold text-gray-800 mb-2 text-center'>
-					Live Therapy
-				</h1>
-				<p className='text-gray-600 text-center mb-8'>
-					Join a live therapy session with an AI therapist
-				</p>
+		<div className='min-h-screen flex items-center justify-center p-4 sm:p-6'>
+			<div className='bg-white rounded-2xl shadow-xl p-6 sm:p-8 max-w-md w-full border border-slate-200'>
+				<div className='text-center mb-6'>
+					<h1 className='text-3xl sm:text-4xl font-bold text-slate-800 mb-2'>
+						Live Therapy
+					</h1>
+					<p className='text-slate-600 text-sm sm:text-base'>
+						Get support when you need it most
+					</p>
+				</div>
 
-				<div className='space-y-4'>
+				<div className='space-y-5'>
 					<div>
 						<label
 							htmlFor='userName'
-							className='block text-sm font-medium text-gray-700 mb-2'
+							className='block text-sm font-medium text-slate-700 mb-2'
 						>
 							Your Name
 						</label>
@@ -50,11 +52,11 @@ export function JoinScreen({
 								}
 							}}
 							placeholder='Enter your name'
-							className='w-full px-4 py-2 border text-black border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
+							className='w-full px-4 py-3 border text-slate-900 border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all'
 							disabled={isConnecting}
 						/>
 						{hasPreviousSession && (
-							<p className='mt-2 text-xs text-blue-600 whitespace-nowrap'>
+							<p className='mt-2 text-xs text-blue-600'>
 								Welcome back! Your previous conversations will be remembered.
 							</p>
 						)}
@@ -66,12 +68,12 @@ export function JoinScreen({
 							type='checkbox'
 							checked={rememberMe}
 							onChange={(e) => onRememberMeChange(e.target.checked)}
-							className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer'
+							className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded cursor-pointer'
 							disabled={isConnecting}
 						/>
 						<label
 							htmlFor='rememberMe'
-							className='ml-2 block text-sm text-gray-700 cursor-pointer select-none'
+							className='ml-2 block text-sm text-slate-700 cursor-pointer select-none'
 						>
 							Remember me
 						</label>
@@ -80,7 +82,7 @@ export function JoinScreen({
 					<button
 						onClick={onJoin}
 						disabled={isConnecting || !userName.trim()}
-						className='w-full bg-blue-600 hover:cursor-pointer hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center justify-center'
+						className='cursor-pointer w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-semibold py-3.5 px-6 rounded-xl transition-all duration-200 flex items-center justify-center shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 disabled:shadow-none'
 					>
 						{isConnecting || isWaitingForAgent ? (
 							<>
@@ -112,17 +114,18 @@ export function JoinScreen({
 							'Start Therapy Session'
 						)}
 					</button>
+
 					{isWaitingForAgent && (
-						<p className='text-sm text-gray-500 text-center mt-2'>
+						<p className='text-sm text-slate-500 text-center -mt-1'>
 							Connecting to AI therapist, please wait...
 						</p>
 					)}
 
 					{hasPreviousSession && (
-						<div className='mt-4 pt-4 border-t border-gray-200'>
+						<div className='pt-5 border-t border-slate-200'>
 							<Link
 								href='/dashboard'
-								className='block text-center text-sm text-blue-600 hover:text-blue-700 font-medium'
+								className='block text-center text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors'
 							>
 								View Your Progress Dashboard →
 							</Link>

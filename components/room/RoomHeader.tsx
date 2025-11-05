@@ -32,7 +32,7 @@ export function RoomHeader({
 									clipRule='evenodd'
 								/>
 							</svg>
-							AI Connected
+							Therapist Connected
 						</span>
 					) : (
 						<span className='flex items-center gap-1.5 px-2.5 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium w-fit'>
