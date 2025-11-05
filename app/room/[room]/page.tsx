@@ -14,9 +14,14 @@ import {
 	type SessionSummary,
 } from '@/utils/userSessionStorage';
 
+const STORAGE_KEY_NAME = 'therapy_remembered_name';
+const STORAGE_KEY_REMEMBER = 'therapy_remember_me';
+
 export default function TherapyPage() {
 	const [userName, setUserName] = useState('');
+	const [rememberMe, setRememberMe] = useState(false);
 	const [hasPreviousSession, setHasPreviousSession] = useState(false);
+	const [isLoading, setIsLoading] = useState(true);
 
 	// Transcript management (initialize first)
 	const transcriptHook = useTranscripts();
@@ -246,6 +251,34 @@ export default function TherapyPage() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [userName]);
 
+	// Load remembered name from localStorage on mount
+	useEffect(() => {
+		const rememberedName = localStorage.getItem(STORAGE_KEY_NAME);
+		const shouldRemember =
+			localStorage.getItem(STORAGE_KEY_REMEMBER) === 'true';
+
+		if (shouldRemember && rememberedName) {
+			setUserName(rememberedName);
+			setRememberMe(true);
+		}
+
+		// Small delay for smooth transition
+		setTimeout(() => {
+			setIsLoading(false);
+		}, 300);
+	}, []);
+
+	// Save name to localStorage when userName changes and rememberMe is true
+	useEffect(() => {
+		if (rememberMe && userName.trim()) {
+			localStorage.setItem(STORAGE_KEY_NAME, userName.trim());
+			localStorage.setItem(STORAGE_KEY_REMEMBER, 'true');
+		} else if (!rememberMe) {
+			localStorage.removeItem(STORAGE_KEY_NAME);
+			localStorage.removeItem(STORAGE_KEY_REMEMBER);
+		}
+	}, [userName, rememberMe]);
+
 	// Check for previous session when userName changes
 	useEffect(() => {
 		if (userName.trim()) {
@@ -400,6 +433,22 @@ export default function TherapyPage() {
 		await disconnect();
 	};
 
+	// Loading overlay
+	if (isLoading) {
+		return (
+			<div className='fixed inset-0 bg-white z-50 flex items-center justify-center'>
+				<div className='text-center'>
+					<h1 className='text-4xl font-bold text-gray-800 mb-4 animate-pulse'>
+						Live Therapy
+					</h1>
+					<div className='flex justify-center'>
+						<div className='w-16 h-16 border-4 border-blue-600 border-t-transparent rounded-full animate-spin'></div>
+					</div>
+				</div>
+			</div>
+		);
+	}
+
 	// Join screen
 	if (!isConnected) {
 		return (
@@ -409,6 +458,8 @@ export default function TherapyPage() {
 				onJoin={handleJoin}
 				isConnecting={isConnecting}
 				hasPreviousSession={hasPreviousSession}
+				rememberMe={rememberMe}
+				onRememberMeChange={setRememberMe}
 			/>
 		);
 	}

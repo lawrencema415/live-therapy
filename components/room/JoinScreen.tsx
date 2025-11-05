@@ -5,6 +5,8 @@ interface JoinScreenProps {
 	isConnecting: boolean;
 	isWaitingForAgent?: boolean;
 	hasPreviousSession?: boolean;
+	rememberMe: boolean;
+	onRememberMeChange: (remember: boolean) => void;
 }
 
 export function JoinScreen({
@@ -14,6 +16,8 @@ export function JoinScreen({
 	isConnecting,
 	isWaitingForAgent = false,
 	hasPreviousSession = false,
+	rememberMe,
+	onRememberMeChange,
 }: JoinScreenProps) {
 	return (
 		<div className='min-h-screen bg-gray-50 flex items-center justify-center p-6'>
@@ -55,6 +59,23 @@ export function JoinScreen({
 							className='w-full px-4 py-2 border text-black border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
 							disabled={isConnecting}
 						/>
+					</div>
+
+					<div className='flex items-center'>
+						<input
+							id='rememberMe'
+							type='checkbox'
+							checked={rememberMe}
+							onChange={(e) => onRememberMeChange(e.target.checked)}
+							className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
+							disabled={isConnecting}
+						/>
+						<label
+							htmlFor='rememberMe'
+							className='ml-2 block text-sm text-gray-700 cursor-pointer'
+						>
+							Remember me
+						</label>
 					</div>
 
 					<button
