@@ -1,14 +1,15 @@
 // Custom hook for managing LiveKit room connection
 
 import { useState, useRef, useCallback } from 'react';
-import { Room, RoomEvent, createLocalAudioTrack, ParticipantKind, LocalAudioTrack } from 'livekit-client';
+import { Room, RoomEvent, createLocalAudioTrack, ParticipantKind, LocalAudioTrack, RemoteParticipant } from 'livekit-client';
 import type { TranscriptMessage, TextStreamReader, ParticipantIdentity, StoredTranscript } from '@/types/room';
-import { storeTranscriptsInStorage, loadTranscriptsFromStorage } from '@/utils/transcriptStorage';
+import { loadTranscriptsFromStorage } from '@/utils/transcriptStorage';
+import type { SessionSummary } from '@/utils/userSessionStorage';
 
 interface UseRoomConnectionProps {
 	onTranscriptsUpdate: (transcripts: TranscriptMessage[]) => void;
 	onTranscriptReceived: (message: TranscriptMessage) => void;
-	onSummariesReceived?: (summaries: any[]) => void;
+	onSummariesReceived?: (summaries: SessionSummary[]) => void;
 }
 
 export function useRoomConnection({
@@ -23,11 +24,12 @@ export function useRoomConnection({
 	const [isMuted, setIsMuted] = useState(false);
 	const roomRef = useRef<Room | null>(null);
 	const micTrackRef = useRef<LocalAudioTrack | null>(null);
+	const shouldAutoUnmuteRef = useRef(false);
 
 	const connectToRoom = useCallback(async (
 		userName: string, 
 		previousTranscripts: StoredTranscript[] = [],
-		previousSummaries?: any[]
+		previousSummaries?: SessionSummary[]
 	) => {
 		if (!userName.trim() || isConnecting) {
 			return;
@@ -197,8 +199,12 @@ export function useRoomConnection({
 			// Publish microphone audio
 			const mic = await createLocalAudioTrack();
 			micTrackRef.current = mic;
+			// Mute by default until agent connects
+			mic.mute();
+			setIsMuted(true);
+			shouldAutoUnmuteRef.current = true; // Flag to auto-unmute when agent connects
 			await currentRoom.localParticipant.publishTrack(mic);
-			console.log('Microphone track published');
+			console.log('Microphone track published (muted by default until agent connects)');
 
 			// Listen to remote audio tracks (agent voice)
 			currentRoom.on(RoomEvent.TrackSubscribed, (track) => {
@@ -240,10 +246,11 @@ export function useRoomConnection({
 							// Safely check audio tracks - may not exist immediately
 							let hasAudioTracks = false;
 							try {
-								if (p.audioTracks) {
-									hasAudioTracks = Array.from(p.audioTracks.values()).length > 0;
-								}
-							} catch (e) {
+								const trackPublications = Array.from(p.trackPublications.values());
+								hasAudioTracks = trackPublications.some(
+									(trackPub) => trackPub.kind === 'audio'
+								);
+							} catch {
 								// Audio tracks not available yet, that's okay
 							}
 							
@@ -262,6 +269,15 @@ export function useRoomConnection({
 						setIsAgentConnected(true);
 						setIsWaitingForAgent(false);
 						console.log('[RoomConnection] ✓ Agent detected in room');
+						
+						// Automatically unmute microphone when agent connects
+						if (micTrackRef.current && shouldAutoUnmuteRef.current) {
+							micTrackRef.current.unmute();
+							setIsMuted(false);
+							shouldAutoUnmuteRef.current = false; // Clear flag after unmuting
+							console.log('[RoomConnection] Microphone unmuted automatically - agent connected');
+						}
+						
 						if (agentCheckInterval) {
 							clearInterval(agentCheckInterval);
 							agentCheckInterval = null;
@@ -283,9 +299,9 @@ export function useRoomConnection({
 			checkAgentConnection();
 
 			// Listen for participant connected events to detect agent
-			const participantConnectedHandler = (participant: any) => {
+			const participantConnectedHandler = (participant: RemoteParticipant) => {
 				if (!participant) return;
-				const pKind = participant.kind || 'unknown';
+				const pKind = participant.kind || undefined;
 				const pIdentity = participant.identity || 'unknown';
 				console.log(`[RoomConnection] Participant connected: ${pIdentity}, kind: ${pKind}`);
 				
@@ -303,7 +319,7 @@ export function useRoomConnection({
 				}
 			};
 
-			const participantDisconnectedHandler = (participant: any) => {
+			const participantDisconnectedHandler = (participant: RemoteParticipant) => {
 				if (!participant) return;
 				console.log('[RoomConnection] Participant disconnected:', participant.identity || 'unknown');
 				checkAgentConnection();
@@ -359,13 +375,15 @@ export function useRoomConnection({
 		} finally {
 			setIsConnecting(false);
 		}
-	}, [onTranscriptsUpdate, onTranscriptReceived]);
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [onTranscriptsUpdate, onTranscriptReceived, onSummariesReceived]);
 
 	const toggleMute = useCallback(() => {
 		if (micTrackRef.current) {
 			if (isMuted) {
 				micTrackRef.current.unmute();
 				setIsMuted(false);
+				shouldAutoUnmuteRef.current = false; // User manually unmuted, don't auto-unmute
 				console.log('[RoomConnection] Microphone unmuted');
 			} else {
 				micTrackRef.current.mute();
@@ -385,6 +403,7 @@ export function useRoomConnection({
 					micTrackRef.current.stop();
 					micTrackRef.current = null;
 				}
+				shouldAutoUnmuteRef.current = false;
 				
 				// Disconnect from room - this will trigger agent job to end
 				// When all participants leave, the agent job ends automatically
@@ -451,8 +470,8 @@ function setupTranscriptHandlers(
 					}
 					// If it's not the local user, it might be the agent (fallback)
 					if (participantIdentity !== localParticipantIdentity) {
-						// Check if it's not a user participant
-						if (participant.kind !== ParticipantKind.STANDARD && participant.kind !== ParticipantKind.UNKNOWN) {
+						// Check if it's not a user participant (STANDARD kind)
+						if (participant.kind !== ParticipantKind.STANDARD) {
 							agentParticipantIdentity = participantIdentity;
 							console.log(`[RoomConnection] ✓ Identified agent by process of elimination: ${participantIdentity} (kind: ${participant.kind})`);
 							return true;
@@ -491,14 +510,12 @@ function setupTranscriptHandlers(
 	};
 
 	// Try to use registerTextStreamHandler (available in livekit-client v2+)
-	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const hasTextStreamHandler =
-		typeof (room as any).registerTextStreamHandler === 'function';
+		typeof (room as unknown as { registerTextStreamHandler?: (topic: string, handler: unknown) => void }).registerTextStreamHandler === 'function';
 
 	if (hasTextStreamHandler) {
 		console.log('Using registerTextStreamHandler method...');
-		// eslint-disable-next-line @typescript-eslint/no-explicit-any
-		(room as any).registerTextStreamHandler(
+		(room as unknown as { registerTextStreamHandler: (topic: string, handler: (reader: TextStreamReader, participantInfo: ParticipantIdentity | string) => Promise<void>) => void }).registerTextStreamHandler(
 			'lk.transcription',
 			async (
 				reader: TextStreamReader,

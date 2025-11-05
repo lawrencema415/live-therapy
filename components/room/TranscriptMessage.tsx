@@ -19,7 +19,7 @@ export function TranscriptMessageComponent({
 			>
 				<div className='flex items-center justify-between mb-1'>
 					<div className='text-xs font-semibold opacity-70'>{displayName}</div>
-					<div className='text-xs opacity-50'>
+					<div className='text-xs opacity-50 whitespace-nowrap ml-2'>
 						{new Date(message.timestamp).toLocaleTimeString([], {
 							hour: 'numeric',
 							minute: '2-digit',
@@ -33,9 +33,6 @@ export function TranscriptMessageComponent({
 					}`}
 				>
 					{message.text}
-					{!message.isFinal && (
-						<span className='inline-block w-2 h-4 ml-1 bg-current animate-pulse' />
-					)}
 				</div>
 			</div>
 		</div>

@@ -20,7 +20,7 @@ export function JoinScreen({
 	onRememberMeChange,
 }: JoinScreenProps) {
 	return (
-		<div className='min-h-screen bg-gray-50 flex items-center justify-center p-6'>
+		<div className='min-h-screen flex items-center justify-center p-6'>
 			<div className='bg-white rounded-lg shadow-lg p-8 max-w-md w-full'>
 				<h1 className='text-3xl font-bold text-gray-800 mb-2 text-center'>
 					Live Therapy
@@ -64,12 +64,12 @@ export function JoinScreen({
 							type='checkbox'
 							checked={rememberMe}
 							onChange={(e) => onRememberMeChange(e.target.checked)}
-							className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded'
+							className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded cursor-pointer'
 							disabled={isConnecting}
 						/>
 						<label
 							htmlFor='rememberMe'
-							className='ml-2 block text-sm text-gray-700 cursor-pointer'
+							className='ml-2 block text-sm text-gray-700 cursor-pointer select-none'
 						>
 							Remember me
 						</label>
@@ -78,7 +78,7 @@ export function JoinScreen({
 					<button
 						onClick={onJoin}
 						disabled={isConnecting || !userName.trim()}
-						className='w-full bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center justify-center'
+						className='w-full bg-blue-600 hover:cursor-pointer hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center justify-center'
 					>
 						{isConnecting || isWaitingForAgent ? (
 							<>

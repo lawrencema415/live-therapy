@@ -23,6 +23,7 @@ export default function TherapyPage() {
 	const [rememberMe, setRememberMe] = useState(false);
 	const [hasPreviousSession, setHasPreviousSession] = useState(false);
 	const [isLoading, setIsLoading] = useState(true);
+	const [isSaving, setIsSaving] = useState(false);
 
 	// Transcript management (initialize first)
 	const transcriptHook = useTranscripts();
@@ -31,6 +32,7 @@ export default function TherapyPage() {
 	const {
 		isConnected,
 		isConnecting,
+		isWaitingForAgent,
 		isMuted,
 		connectToRoom,
 		disconnect,
@@ -62,9 +64,9 @@ export default function TherapyPage() {
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [isConnected]);
 
-	// Save transcripts when session ends
+	// Save transcripts when session ends (only for automatic disconnects, not user-initiated)
 	useEffect(() => {
-		if (!isConnected && userName) {
+		if (!isConnected && userName && !isSaving) {
 			// Finalize all buffered messages first
 			transcriptHook.finalizeAllBuffers();
 
@@ -104,6 +106,9 @@ export default function TherapyPage() {
 
 					const key = `therapy_user_${userName.trim().toLowerCase()}`;
 					localStorage.setItem(key, JSON.stringify(sessionData));
+
+					// Note: Don't set isSaving here - this useEffect is for automatic disconnects only
+					// User-initiated saves are handled in handleEndCall
 
 					// Generate and save summary via API (async, don't block)
 					(async () => {
@@ -159,7 +164,7 @@ export default function TherapyPage() {
 			}, 2000); // Wait 2 seconds to allow merge buffer to finalize
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [isConnected, userName]);
+	}, [isConnected, userName, isSaving]);
 
 	// Cleanup on unmount - save transcripts properly
 	useEffect(() => {
@@ -350,6 +355,9 @@ export default function TherapyPage() {
 	};
 
 	const handleEndCall = async () => {
+		// Set saving state to disable button and show "Saving..." text
+		setIsSaving(true);
+
 		// Finalize all buffered messages first
 		transcriptHook.finalizeAllBuffers();
 
@@ -390,6 +398,9 @@ export default function TherapyPage() {
 
 			const key = `therapy_user_${userName.trim().toLowerCase()}`;
 			localStorage.setItem(key, JSON.stringify(sessionData));
+
+			// Mark saving as complete (localStorage save is done, summary is async)
+			setIsSaving(false);
 
 			// Generate and save summary via API (async, don't block)
 			(async () => {
@@ -474,22 +485,48 @@ export default function TherapyPage() {
 
 	// Room view
 	return (
-		<div className='min-h-screen bg-gray-50 p-6'>
+		<div className='min-h-screen p-6'>
 			<div className='max-w-4xl mx-auto'>
-				<RoomHeader roomName={userName} onEndCall={handleEndCall} />
+				<RoomHeader
+					roomName={userName}
+					onEndCall={handleEndCall}
+					isSaving={isSaving}
+				/>
 				<div className='relative'>
 					<TranscriptList transcripts={transcriptHook.transcripts} />
-					<button
-						onClick={toggleMute}
-						className='absolute bottom-6 right-6 bg-white hover:bg-gray-100 border-2 border-gray-300 rounded-full p-3 shadow-lg transition-all duration-200 flex items-center justify-center z-10'
-						title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
-					>
-						{isMuted ? (
-							<MicOff className='h-6 w-6 text-red-600' />
-						) : (
-							<Mic className='h-6 w-6 text-gray-700' />
-						)}
-					</button>
+					{(() => {
+						const lastMessage =
+							transcriptHook.transcripts[transcriptHook.transcripts.length - 1];
+						const isLastMessageFromAgent =
+							lastMessage?.speaker?.startsWith('agent') ?? false;
+						const shouldPulse =
+							isMuted && isLastMessageFromAgent && !isWaitingForAgent;
+
+						return (
+							<button
+								onClick={toggleMute}
+								disabled={isWaitingForAgent}
+								className={`absolute bottom-6 right-6 bg-white hover:bg-gray-100 disabled:bg-gray-50 disabled:cursor-not-allowed rounded-full p-3 shadow-lg transition-all duration-200 flex items-center justify-center z-10 ${
+									shouldPulse
+										? 'mic-pulse-alert border-red-500'
+										: 'border-2 border-gray-300'
+								}`}
+								title={
+									isWaitingForAgent
+										? 'Microphone disabled - waiting for agent to connect'
+										: isMuted
+										? 'Unmute microphone'
+										: 'Mute microphone'
+								}
+							>
+								{isWaitingForAgent || isMuted ? (
+									<MicOff className='h-6 w-6 text-red-600' />
+								) : (
+									<Mic className='h-6 w-6 text-gray-700' />
+								)}
+							</button>
+						);
+					})()}
 				</div>
 			</div>
 		</div>
