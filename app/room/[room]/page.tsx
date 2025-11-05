@@ -169,7 +169,7 @@ export default function TherapyPage() {
 				} else {
 					console.log(`[TherapyPage] No transcripts to save on disconnect`);
 				}
-			}, 2000); // Wait 2 seconds to allow merge buffer to finalize
+			}, 1500); // Wait 1.5 seconds to allow merge buffer to finalize
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [isConnected, userName, isSaving]);
