@@ -51,7 +51,9 @@ export async function loadTranscriptsFromStorage(
 ): Promise<TranscriptMessage[]> {
 	try {
 		const remoteParticipants = Array.from(room.remoteParticipants.values());
+		const allLoadedMessages: TranscriptMessage[] = [];
 
+		// Check all remote participants (including agent) for transcripts
 		for (const participant of remoteParticipants) {
 			// eslint-disable-next-line @typescript-eslint/no-explicit-any
 			const attributes = (participant as any).attributes;
@@ -65,7 +67,7 @@ export async function loadTranscriptsFromStorage(
 						// Convert stored transcripts to TranscriptMessage format
 						const loadedMessages: TranscriptMessage[] =
 							storedTranscripts.map((t, idx) => ({
-								id: `stored-${t.timestamp}-${idx}`,
+								id: `stored-${participant.identity}-${t.timestamp}-${idx}`,
 								speaker: t.role === 'assistant' ? 'agent' : t.role,
 								text: t.text,
 								isFinal: true,
@@ -74,15 +76,22 @@ export async function loadTranscriptsFromStorage(
 
 						if (loadedMessages.length > 0) {
 							console.log(
-								`Loaded ${loadedMessages.length} transcripts from storage`
+								`Loaded ${loadedMessages.length} transcripts from participant ${participant.identity} (kind: ${participant.kind})`
 							);
-							return loadedMessages;
+							allLoadedMessages.push(...loadedMessages);
 						}
 					} catch (e) {
 						console.warn('Failed to parse stored transcripts:', e);
 					}
 				}
 			}
+		}
+		
+		// Sort by timestamp to ensure chronological order
+		if (allLoadedMessages.length > 0) {
+			allLoadedMessages.sort((a, b) => a.timestamp - b.timestamp);
+			console.log(`Loaded ${allLoadedMessages.length} total transcripts from storage`);
+			return allLoadedMessages;
 		}
 	} catch (error) {
 		console.error('Error loading transcripts from storage:', error);

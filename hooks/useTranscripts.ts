@@ -13,6 +13,8 @@ export function useTranscripts() {
 	const interimMessagesRef = useRef<Map<string, TranscriptMessage>>(new Map());
 	const messageBufferRef = useRef<Map<string, MessageBuffer>>(new Map());
 	const roomRef = useRef<Room | null>(null);
+	// Ref to track all finalized transcripts synchronously (for cleanup/saving)
+	const allTranscriptsRef = useRef<TranscriptMessage[]>([]);
 
 	/**
 	 * Finalize merged messages from buffer
@@ -49,9 +51,18 @@ export function useTranscripts() {
 
 					// Add merged message
 					const updated = [...filtered, mergedMessage];
+					
+					// Update ref synchronously with ONLY final messages (for cleanup access)
+					const finalOnly = updated.filter(m => m.isFinal);
+					allTranscriptsRef.current = finalOnly;
+					
+					// Log agent message count for debugging
+					const agentCount = finalOnly.filter(t => t.speaker === 'agent').length;
+					const userCount = finalOnly.filter(t => t.speaker === 'user').length;
+					console.log(`[Transcripts] After finalizing ${speaker} - Total final: ${finalOnly.length}, Agent: ${agentCount}, User: ${userCount}`);
 
 				// Store transcripts in participant attributes
-				storeTranscriptsInStorage(roomRef.current, updated);
+				storeTranscriptsInStorage(roomRef.current, finalOnly);
 
 					return updated;
 				});
@@ -69,8 +80,11 @@ export function useTranscripts() {
 	 */
 	const addTranscript = useCallback(
 		(message: TranscriptMessage) => {
+			// Log ALL transcripts (including agent) for debugging
+			console.log(`[Transcripts] Adding transcript - Speaker: ${message.speaker}, Final: ${message.isFinal}, Text: "${message.text.substring(0, 50)}${message.text.length > 50 ? '...' : ''}"`);
+			
 			if (message.isFinal) {
-				console.log('Final transcript:', message);
+				console.log(`[Transcripts] Final transcript received - Speaker: ${message.speaker}`);
 
 				// Remove interim message if exists
 				interimMessagesRef.current.delete(message.id);
@@ -126,15 +140,24 @@ export function useTranscripts() {
 						(msg) => msg.id === message.id && !msg.isFinal
 					);
 
+					let updated: TranscriptMessage[];
 					if (existingIndex >= 0) {
 						// Update existing interim message
-						const updated = [...prev];
+						updated = [...prev];
 						updated[existingIndex] = message;
-						return updated;
 					} else {
 						// Add new interim message at the end
-						return [...prev, message];
+						updated = [...prev, message];
 					}
+					
+					// Update ref for final messages only (interim messages shouldn't be saved)
+					// Only update ref if we have final messages in the updated array
+					const finalMessages = updated.filter(m => m.isFinal);
+					if (finalMessages.length > 0) {
+						allTranscriptsRef.current = finalMessages;
+					}
+					
+					return updated;
 				});
 
 				// Track interim message
@@ -149,6 +172,7 @@ export function useTranscripts() {
 	 */
 	const setTranscriptsFromStorage = useCallback((newTranscripts: TranscriptMessage[]) => {
 		setTranscripts(newTranscripts);
+		allTranscriptsRef.current = newTranscripts; // Keep ref in sync
 	}, []);
 
 	/**
@@ -166,15 +190,130 @@ export function useTranscripts() {
 		}
 
 		setTranscripts([]);
+		allTranscriptsRef.current = [];
 		interimMessagesRef.current.clear();
 		messageBufferRef.current.clear();
 	}, [finalizeMergedMessages]);
+
+	/**
+	 * Force finalize all pending buffered messages
+	 * This ensures agent messages in buffers are saved before disconnect
+	 * Returns the current transcripts after finalization (for immediate access)
+	 */
+	const finalizeAllBuffers = useCallback(() => {
+		console.log('[Transcripts] Finalizing all pending message buffers...');
+		const buffersToFinalize: Array<{ speaker: string; count: number }> = [];
+		
+		// Collect all buffered messages first
+		const allBufferedMessages: Array<{ speaker: string; messages: TranscriptMessage[] }> = [];
+		for (const [speaker, buffer] of messageBufferRef.current.entries()) {
+			if (buffer.timeoutId) {
+				clearTimeout(buffer.timeoutId);
+				buffer.timeoutId = null;
+			}
+			if (buffer.messages.length > 0) {
+				buffersToFinalize.push({ speaker, count: buffer.messages.length });
+				allBufferedMessages.push({ speaker, messages: [...buffer.messages] });
+				console.log(`[Transcripts] Finalizing ${buffer.messages.length} buffered messages for ${speaker}`);
+			}
+		}
+		
+		// Now finalize all buffers (this updates state async, but we'll update ref synchronously)
+		for (const { speaker } of allBufferedMessages) {
+			finalizeMergedMessages(speaker);
+		}
+		
+		// Manually update ref with finalized messages synchronously
+		// This ensures we have the latest data even if state hasn't updated yet
+		if (allBufferedMessages.length > 0) {
+			const currentFinal = allTranscriptsRef.current.filter(m => m.isFinal);
+			const newFinalized: TranscriptMessage[] = [];
+			
+			for (const { speaker, messages } of allBufferedMessages) {
+				if (messages.length > 0) {
+					const mergedText = messages
+						.map((m) => m.text.trim())
+						.filter((text) => text.length > 0)
+						.join(' ');
+					
+					if (mergedText.trim()) {
+						newFinalized.push({
+							id: `merged-${speaker}-${messages[0].timestamp}-${Date.now()}`,
+							speaker: speaker,
+							text: mergedText,
+							isFinal: true,
+							timestamp: messages[0].timestamp,
+						});
+					}
+				}
+			}
+			
+			// Remove any existing final messages from these speakers and add new ones
+			const speakersToUpdate = new Set(allBufferedMessages.map(b => b.speaker));
+			const filtered = currentFinal.filter(m => !speakersToUpdate.has(m.speaker));
+			const updated = [...filtered, ...newFinalized].sort((a, b) => a.timestamp - b.timestamp);
+			
+			allTranscriptsRef.current = updated;
+			
+			console.log(`[Transcripts] Updated ref - Total: ${updated.length}, Agent: ${updated.filter(t => t.speaker === 'agent').length}, User: ${updated.filter(t => t.speaker === 'user').length}`);
+		}
+		
+		if (buffersToFinalize.length > 0) {
+			console.log(`[Transcripts] Finalized ${buffersToFinalize.length} buffers:`, buffersToFinalize.map(b => `${b.speaker}(${b.count})`).join(', '));
+		} else {
+			console.log('[Transcripts] No buffers to finalize');
+		}
+		
+		// Return current transcripts from ref (synchronously accessible, now with buffered messages)
+		return allTranscriptsRef.current;
+	}, [finalizeMergedMessages]);
+	
+	/**
+	 * Get all current transcripts synchronously (for cleanup)
+	 */
+	const getAllTranscripts = useCallback(() => {
+		// Finalize buffers first (this updates the ref synchronously)
+		const finalized = finalizeAllBuffers();
+		
+		// Also get current state transcripts (in case there are any not in buffers)
+		const stateFinal = allTranscriptsRef.current.filter(m => m.isFinal);
+		
+		// Combine and deduplicate by id, prefer finalized buffer messages
+		const allFinal = new Map<string, TranscriptMessage>();
+		
+		// Add state transcripts first
+		for (const msg of stateFinal) {
+			if (msg.isFinal) {
+				allFinal.set(msg.id, msg);
+			}
+		}
+		
+		// Add finalized buffer messages (these will overwrite if same id)
+		for (const msg of finalized) {
+			if (msg.isFinal) {
+				allFinal.set(msg.id, msg);
+			}
+		}
+		
+		const result = Array.from(allFinal.values()).sort((a, b) => a.timestamp - b.timestamp);
+		
+		// Update ref with combined result
+		allTranscriptsRef.current = result;
+		
+		const agentCount = result.filter(t => t.speaker === 'agent').length;
+		const userCount = result.filter(t => t.speaker === 'user').length;
+		console.log(`[Transcripts] getAllTranscripts - Total: ${result.length}, Agent: ${agentCount}, User: ${userCount}`);
+		
+		return result;
+	}, [finalizeAllBuffers]);
 
 	return {
 		transcripts,
 		addTranscript,
 		setTranscriptsFromStorage,
 		clearTranscripts,
+		finalizeAllBuffers,
+		getAllTranscripts,
 		setRoom: (room: Room | null) => {
 			roomRef.current = room;
 		},

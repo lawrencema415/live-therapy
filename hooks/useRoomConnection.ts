@@ -8,11 +8,13 @@ import { storeTranscriptsInStorage, loadTranscriptsFromStorage } from '@/utils/t
 interface UseRoomConnectionProps {
 	onTranscriptsUpdate: (transcripts: TranscriptMessage[]) => void;
 	onTranscriptReceived: (message: TranscriptMessage) => void;
+	onSummariesReceived?: (summaries: any[]) => void;
 }
 
 export function useRoomConnection({
 	onTranscriptsUpdate,
 	onTranscriptReceived,
+	onSummariesReceived,
 }: UseRoomConnectionProps) {
 	const [isConnected, setIsConnected] = useState(false);
 	const [isConnecting, setIsConnecting] = useState(false);
@@ -20,7 +22,11 @@ export function useRoomConnection({
 	const [isWaitingForAgent, setIsWaitingForAgent] = useState(false);
 	const roomRef = useRef<Room | null>(null);
 
-	const connectToRoom = useCallback(async (userName: string, previousTranscripts: StoredTranscript[] = []) => {
+	const connectToRoom = useCallback(async (
+		userName: string, 
+		previousTranscripts: StoredTranscript[] = [],
+		previousSummaries?: any[]
+	) => {
 		if (!userName.trim() || isConnecting) {
 			return;
 		}
@@ -30,7 +36,7 @@ export function useRoomConnection({
 			// Use userName as identity
 			const identity = userName.trim();
 
-			// Get token from API with userName and previous transcripts
+			// Get token from API with userName, previous transcripts, and summaries
 			const tokenParams = new URLSearchParams({
 				identity: identity,
 				userName: identity,
@@ -39,6 +45,13 @@ export function useRoomConnection({
 			// Add previous transcripts as JSON if available
 			if (previousTranscripts.length > 0) {
 				tokenParams.append('previousTranscripts', JSON.stringify(previousTranscripts));
+			}
+
+			// Add previous summaries as JSON if available (only most recent to avoid URL size limits)
+			if (previousSummaries && previousSummaries.length > 0) {
+				// Only send the most recent summary to avoid 431 errors
+				const mostRecentSummary = previousSummaries[previousSummaries.length - 1];
+				tokenParams.append('previousSummaries', JSON.stringify([mostRecentSummary]));
 			}
 
 			const res = await fetch(`/api/token?${tokenParams.toString()}`);
@@ -83,23 +96,34 @@ export function useRoomConnection({
 			// Send user info via data track (since setAttributes requires permissions)
 			// The agent can read this from the data track or use identity (which is userName)
 			try {
+				// Always send user info, even if no previous data (for agent to identify user)
+				// Only send most recent summary to avoid payload size issues
+				const summariesToSend = previousSummaries && previousSummaries.length > 0
+					? [previousSummaries[previousSummaries.length - 1]]
+					: [];
+				
+				const userInfoData = {
+					type: 'user_info',
+					userName: userName.trim(),
+					previousTranscripts: previousTranscripts,
+					previousSummaries: summariesToSend,
+				};
+				
+				const data = new TextEncoder().encode(JSON.stringify(userInfoData));
+				await currentRoom.localParticipant.publishData(data, {
+					reliable: true,
+					topic: 'user_info',
+				});
+				
+				console.log(`[RoomConnection] ✓ Sent user info via data track: "${userName.trim()}" with ${previousTranscripts.length} transcripts and ${summariesToSend.length} summary (most recent only)`);
 				if (previousTranscripts.length > 0) {
-					const userInfoData = {
-						type: 'user_info',
-						userName: userName.trim(),
-						previousTranscripts: previousTranscripts,
-					};
-					
-					const data = new TextEncoder().encode(JSON.stringify(userInfoData));
-					await currentRoom.localParticipant.publishData(data, {
-						reliable: true,
-						topic: 'user_info',
-					});
-					
-					console.log(`[RoomConnection] ✓ Sent user info via data track: "${userName.trim()}" with ${previousTranscripts.length} transcripts`);
 					console.log(`[RoomConnection] Sample transcripts:`, previousTranscripts.slice(0, 2).map(t => `${t.role}: ${t.text.substring(0, 30)}...`));
-				} else {
-					console.log(`[RoomConnection] User identity: "${userName.trim()}" (no previous transcripts)`);
+				}
+				if (summariesToSend.length > 0) {
+					console.log(`[RoomConnection] Most recent summary:`, {
+						date: new Date(summariesToSend[0].timestamp).toLocaleDateString(),
+						themes: summariesToSend[0].keyThemes.slice(0, 2)
+					});
 				}
 				
 				console.log(`[RoomConnection] Participant identity: ${currentRoom.localParticipant.identity}`);
@@ -123,11 +147,48 @@ export function useRoomConnection({
 				}
 			}, 1000);
 
-			// Listen for participant attribute changes to update transcripts
+			// Listen for participant attribute changes to update transcripts and load summaries
 			currentRoom.on(RoomEvent.ParticipantAttributesChanged, async () => {
 				const loadedTranscripts = await loadTranscriptsFromStorage(currentRoom);
 				if (loadedTranscripts.length > 0) {
 					onTranscriptsUpdate(loadedTranscripts);
+				}
+				
+				// Check for summaries from agent participant (stored with key summaries_{userName})
+				if (onSummariesReceived) {
+					try {
+						// Find agent participant (usually has kind === AGENT or is not the local participant)
+						const remoteParticipants = Array.from(currentRoom.remoteParticipants.values());
+						for (const participant of remoteParticipants) {
+							// eslint-disable-next-line @typescript-eslint/no-explicit-any
+							const attributes = (participant as any).attributes;
+							if (attributes) {
+								const summariesKey = `summaries_${userName.trim()}`;
+								let summariesJson: string | undefined;
+								
+								if (typeof attributes.get === 'function') {
+									summariesJson = attributes.get(summariesKey);
+								} else if (typeof attributes === 'object') {
+									// eslint-disable-next-line @typescript-eslint/no-explicit-any
+									summariesJson = (attributes as any)[summariesKey];
+								}
+								
+								if (summariesJson && typeof summariesJson === 'string') {
+									try {
+										const summaries = JSON.parse(summariesJson);
+										if (Array.isArray(summaries) && summaries.length > 0) {
+											console.log(`[RoomConnection] Received ${summaries.length} summaries from agent`);
+											onSummariesReceived(summaries);
+										}
+									} catch (e) {
+										console.warn('[RoomConnection] Failed to parse summaries:', e);
+									}
+								}
+							}
+						}
+					} catch (error) {
+						console.error('[RoomConnection] Error checking for summaries:', error);
+					}
 				}
 			});
 
@@ -340,6 +401,69 @@ function setupTranscriptHandlers(
 ) {
 	console.log('Registering text stream handler for transcriptions...');
 
+	// Store agent participant identity when detected
+	let agentParticipantIdentity: string | null = null;
+	const localParticipantIdentity = room.localParticipant?.identity || '';
+
+	// Function to identify if a participant is the agent
+	const identifyAgent = (participantIdentity: string): boolean => {
+		// If we've already identified the agent, use that
+		if (agentParticipantIdentity && participantIdentity === agentParticipantIdentity) {
+			return true;
+		}
+		
+		// Check remote participants
+		try {
+			const remoteParticipants = Array.from(room.remoteParticipants.values());
+			for (const participant of remoteParticipants) {
+				if (participant.identity === participantIdentity) {
+					if (participant.kind === ParticipantKind.AGENT) {
+						// Store for future reference
+						agentParticipantIdentity = participantIdentity;
+						console.log(`[RoomConnection] ✓ Identified and stored agent participant identity: ${participantIdentity}`);
+						return true;
+					}
+					// If it's not the local user, it might be the agent (fallback)
+					if (participantIdentity !== localParticipantIdentity) {
+						// Check if it's not a user participant
+						if (participant.kind !== ParticipantKind.STANDARD && participant.kind !== ParticipantKind.UNKNOWN) {
+							agentParticipantIdentity = participantIdentity;
+							console.log(`[RoomConnection] ✓ Identified agent by process of elimination: ${participantIdentity} (kind: ${participant.kind})`);
+							return true;
+						}
+					}
+				}
+			}
+			
+			// Also check all remote participants to proactively identify agent
+			for (const participant of remoteParticipants) {
+				if (participant.kind === ParticipantKind.AGENT && participant.identity !== localParticipantIdentity) {
+					agentParticipantIdentity = participant.identity;
+					console.log(`[RoomConnection] ✓ Proactively identified agent participant: ${participant.identity}`);
+					// Check if this matches the current identity
+					if (participantIdentity === participant.identity) {
+						return true;
+					}
+				}
+			}
+		} catch (e) {
+			console.warn('[RoomConnection] Error checking participant:', e);
+		}
+		
+		// Fallback: if it's not the local participant, assume it's the agent
+		// This is important because agent transcriptions might come through before participant is fully registered
+		if (participantIdentity !== localParticipantIdentity && participantIdentity !== 'user' && participantIdentity !== 'unknown' && participantIdentity.trim() !== '') {
+			// Only set if we haven't identified the agent yet
+			if (!agentParticipantIdentity) {
+				agentParticipantIdentity = participantIdentity;
+				console.log(`[RoomConnection] ✓ Assuming agent identity (fallback): ${participantIdentity}`);
+			}
+			return participantIdentity === agentParticipantIdentity;
+		}
+		
+		return false;
+	};
+
 	// Try to use registerTextStreamHandler (available in livekit-client v2+)
 	// eslint-disable-next-line @typescript-eslint/no-explicit-any
 	const hasTextStreamHandler =
@@ -358,10 +482,39 @@ function setupTranscriptHandlers(
 				const isFinal =
 					info.attributes['lk.transcription_final'] === 'true';
 				const segmentId = info.attributes['lk.segment_id'] || info.id;
-				const speaker =
-					typeof participantInfo === 'string'
-						? participantInfo
-						: participantInfo?.identity || 'unknown';
+				
+				// Determine speaker identity
+				let speakerIdentity: string;
+				if (typeof participantInfo === 'string') {
+					speakerIdentity = participantInfo;
+				} else {
+					speakerIdentity = participantInfo?.identity || 'unknown';
+				}
+				
+				// Determine if this is from the agent
+				let speaker: string;
+				if (speakerIdentity === localParticipantIdentity || speakerIdentity === 'user') {
+					// This is from the local participant (user)
+					speaker = 'user';
+				} else if (identifyAgent(speakerIdentity)) {
+					// This is from the agent
+					speaker = 'agent';
+				} else {
+					// If we don't know, but it's not the user, assume it's the agent
+					// This is critical - agent messages might come through with unknown identity
+					if (speakerIdentity !== localParticipantIdentity && speakerIdentity !== 'unknown' && speakerIdentity.trim() !== '') {
+						speaker = 'agent';
+						// Store it for future reference
+						if (!agentParticipantIdentity) {
+							agentParticipantIdentity = speakerIdentity;
+							console.log(`[RoomConnection] ✓ Assumed agent from unknown identity: ${speakerIdentity}`);
+						}
+					} else {
+						// Default: use identity as-is (but log it)
+						speaker = speakerIdentity;
+						console.warn(`[RoomConnection] ⚠️ Unknown speaker identity: ${speakerIdentity}, using as-is`);
+					}
+				}
 
 				try {
 					const text = await reader.readAll();
@@ -378,6 +531,13 @@ function setupTranscriptHandlers(
 						timestamp: Date.now(),
 					};
 
+					// Enhanced logging for agent messages
+					if (speaker === 'agent') {
+						console.log(`[RoomConnection] 🎯 AGENT TRANSCRIPT - Speaker: ${speaker}, Identity: ${speakerIdentity}, Text: "${text.substring(0, 80)}${text.length > 80 ? '...' : ''}", Final: ${isFinal}`);
+					} else {
+						console.log(`[RoomConnection] Received transcript - Speaker: ${speaker} (identity: ${speakerIdentity}), Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}", Final: ${isFinal}`);
+					}
+					
 					onTranscriptReceived(message);
 				} catch (err) {
 					console.error('Error reading transcription stream:', err);
