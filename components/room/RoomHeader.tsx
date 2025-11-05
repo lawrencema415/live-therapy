@@ -10,12 +10,14 @@ export function RoomHeader({
 	isAgentConnected = false,
 }: RoomHeaderProps) {
 	return (
-		<div className='bg-white rounded-lg shadow-lg p-6 mb-6 flex items-center justify-between'>
-			<div className='flex-1'>
-				<div className='flex items-center gap-3 mb-2'>
-					<h1 className='text-2xl font-bold text-gray-800'>Therapy Session</h1>
+		<div className='bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4'>
+			<div className='flex-1 min-w-0'>
+				<div className='flex flex-col sm:flex-row sm:items-center gap-2 sm:gap-3 mb-2'>
+					<h1 className='text-xl sm:text-2xl font-bold text-gray-800'>
+						Therapy Session
+					</h1>
 					{isAgentConnected ? (
-						<span className='flex items-center gap-1.5 px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium'>
+						<span className='flex items-center gap-1.5 px-2.5 py-1 bg-green-100 text-green-700 rounded-full text-xs font-medium w-fit'>
 							<svg className='w-3 h-3' fill='currentColor' viewBox='0 0 20 20'>
 								<path
 									fillRule='evenodd'
@@ -26,7 +28,7 @@ export function RoomHeader({
 							AI Connected
 						</span>
 					) : (
-						<span className='flex items-center gap-1.5 px-2.5 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium'>
+						<span className='flex items-center gap-1.5 px-2.5 py-1 bg-yellow-100 text-yellow-700 rounded-full text-xs font-medium w-fit'>
 							<svg
 								className='w-3 h-3 animate-pulse'
 								fill='currentColor'
@@ -42,15 +44,17 @@ export function RoomHeader({
 						</span>
 					)}
 				</div>
-				<p className='text-gray-600'>Patient: {roomName}</p>
+				<p className='text-sm sm:text-base text-gray-600 truncate'>
+					Patient: {roomName}
+				</p>
 			</div>
 			<button
 				onClick={onEndCall}
-				className='bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-6 rounded-lg transition-colors duration-200 flex items-center gap-2'
+				className='bg-red-600 hover:bg-red-700 text-white font-semibold py-2 px-4 sm:px-6 rounded-lg transition-colors duration-200 flex items-center justify-center gap-2 text-sm sm:text-base shrink-0'
 			>
 				<svg
 					xmlns='http://www.w3.org/2000/svg'
-					className='h-5 w-5'
+					className='h-4 w-4 sm:h-5 sm:w-5'
 					viewBox='0 0 20 20'
 					fill='currentColor'
 				>
@@ -60,7 +64,8 @@ export function RoomHeader({
 						clipRule='evenodd'
 					/>
 				</svg>
-				End Session
+				<span className='hidden sm:inline'>End Session</span>
+				<span className='sm:hidden'>End</span>
 			</button>
 		</div>
 	);
