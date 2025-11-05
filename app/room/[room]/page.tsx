@@ -12,8 +12,11 @@ import {
 	convertStoredToMessages,
 	loadSessionSummaries,
 	saveSessionSummaries,
+	saveMoodCheckIn,
 	type SessionSummary,
+	type MoodCheckInData,
 } from '@/utils/userSessionStorage';
+import { MoodCheckIn } from '@/components/mood/MoodCheckIn';
 
 const STORAGE_KEY_NAME = 'therapy_remembered_name';
 const STORAGE_KEY_REMEMBER = 'therapy_remember_me';
@@ -24,6 +27,11 @@ export default function TherapyPage() {
 	const [hasPreviousSession, setHasPreviousSession] = useState(false);
 	const [isLoading, setIsLoading] = useState(true);
 	const [isSaving, setIsSaving] = useState(false);
+	const [showPreMoodCheckIn, setShowPreMoodCheckIn] = useState(false);
+	const [showPostMoodCheckIn, setShowPostMoodCheckIn] = useState(false);
+	const [preSessionMood, setPreSessionMood] = useState<MoodCheckInData | null>(
+		null
+	);
 
 	// Transcript management (initialize first)
 	const transcriptHook = useTranscripts();
@@ -305,6 +313,15 @@ export default function TherapyPage() {
 	const handleJoin = async () => {
 		if (!userName.trim()) return;
 
+		// Show pre-session mood check-in first
+		setShowPreMoodCheckIn(true);
+	};
+
+	const handlePreMoodComplete = async (moodData: MoodCheckInData) => {
+		setPreSessionMood(moodData);
+		saveMoodCheckIn(userName.trim(), 'pre', moodData);
+		setShowPreMoodCheckIn(false);
+
 		try {
 			// Load previous session data (transcripts + summaries)
 			const session = loadUserSession(userName.trim());
@@ -354,7 +371,21 @@ export default function TherapyPage() {
 		}
 	};
 
+	const handlePreMoodSkip = () => {
+		setShowPreMoodCheckIn(false);
+		// Still proceed with join
+		handlePreMoodComplete({ rating: 5, timestamp: Date.now() });
+	};
+
 	const handleEndCall = async () => {
+		// Show post-session mood check-in first
+		setShowPostMoodCheckIn(true);
+	};
+
+	const handlePostMoodComplete = async (moodData: MoodCheckInData) => {
+		saveMoodCheckIn(userName.trim(), 'post', moodData);
+		setShowPostMoodCheckIn(false);
+
 		// Set saving state to disable button and show "Saving..." text
 		setIsSaving(true);
 
@@ -450,6 +481,13 @@ export default function TherapyPage() {
 		}
 		transcriptHook.clearTranscripts();
 		await disconnect();
+		setIsSaving(false);
+	};
+
+	const handlePostMoodSkip = () => {
+		setShowPostMoodCheckIn(false);
+		// Still proceed with end call
+		handlePostMoodComplete({ rating: 5, timestamp: Date.now() });
 	};
 
 	// Loading overlay
@@ -471,64 +509,86 @@ export default function TherapyPage() {
 	// Join screen
 	if (!isConnected) {
 		return (
-			<JoinScreen
-				userName={userName}
-				onUserNameChange={setUserName}
-				onJoin={handleJoin}
-				isConnecting={isConnecting}
-				hasPreviousSession={hasPreviousSession}
-				rememberMe={rememberMe}
-				onRememberMeChange={setRememberMe}
-			/>
+			<>
+				<JoinScreen
+					userName={userName}
+					onUserNameChange={setUserName}
+					onJoin={handleJoin}
+					isConnecting={isConnecting}
+					hasPreviousSession={hasPreviousSession}
+					rememberMe={rememberMe}
+					onRememberMeChange={setRememberMe}
+				/>
+				{showPreMoodCheckIn && (
+					<MoodCheckIn
+						type='pre'
+						onComplete={handlePreMoodComplete}
+						onSkip={handlePreMoodSkip}
+						initialRating={preSessionMood?.rating || 5}
+					/>
+				)}
+			</>
 		);
 	}
 
 	// Room view
 	return (
-		<div className='min-h-screen p-6'>
-			<div className='max-w-4xl mx-auto'>
-				<RoomHeader
-					roomName={userName}
-					onEndCall={handleEndCall}
-					isSaving={isSaving}
-				/>
-				<div className='relative'>
-					<TranscriptList transcripts={transcriptHook.transcripts} />
-					{(() => {
-						const lastMessage =
-							transcriptHook.transcripts[transcriptHook.transcripts.length - 1];
-						const isLastMessageFromAgent =
-							lastMessage?.speaker?.startsWith('agent') ?? false;
-						const shouldPulse =
-							isMuted && isLastMessageFromAgent && !isWaitingForAgent;
+		<>
+			<div className='min-h-screen p-6'>
+				<div className='max-w-4xl mx-auto'>
+					<RoomHeader
+						roomName={userName}
+						onEndCall={handleEndCall}
+						isSaving={isSaving}
+					/>
+					<div className='relative'>
+						<TranscriptList transcripts={transcriptHook.transcripts} />
+						{(() => {
+							const lastMessage =
+								transcriptHook.transcripts[
+									transcriptHook.transcripts.length - 1
+								];
+							const isLastMessageFromAgent =
+								lastMessage?.speaker?.startsWith('agent') ?? false;
+							const shouldPulse =
+								isMuted && isLastMessageFromAgent && !isWaitingForAgent;
 
-						return (
-							<button
-								onClick={toggleMute}
-								disabled={isWaitingForAgent}
-								className={`absolute bottom-6 right-6 bg-white hover:bg-gray-100 disabled:bg-gray-50 disabled:cursor-not-allowed rounded-full p-3 shadow-lg transition-all duration-200 flex items-center justify-center z-10 ${
-									shouldPulse
-										? 'mic-pulse-alert border-red-500'
-										: 'border-2 border-gray-300'
-								}`}
-								title={
-									isWaitingForAgent
-										? 'Microphone disabled - waiting for agent to connect'
-										: isMuted
-										? 'Unmute microphone'
-										: 'Mute microphone'
-								}
-							>
-								{isWaitingForAgent || isMuted ? (
-									<MicOff className='h-6 w-6 text-red-600' />
-								) : (
-									<Mic className='h-6 w-6 text-gray-700' />
-								)}
-							</button>
-						);
-					})()}
+							return (
+								<button
+									onClick={toggleMute}
+									disabled={isWaitingForAgent}
+									className={`absolute bottom-6 right-6 bg-white hover:bg-gray-100 disabled:bg-gray-50 disabled:cursor-not-allowed rounded-full p-3 shadow-lg transition-all duration-200 flex items-center justify-center z-10 ${
+										shouldPulse
+											? 'mic-pulse-alert border-red-500'
+											: 'border-2 border-gray-300'
+									}`}
+									title={
+										isWaitingForAgent
+											? 'Microphone disabled - waiting for agent to connect'
+											: isMuted
+											? 'Unmute microphone'
+											: 'Mute microphone'
+									}
+								>
+									{isWaitingForAgent || isMuted ? (
+										<MicOff className='h-6 w-6 text-red-600' />
+									) : (
+										<Mic className='h-6 w-6 text-gray-700' />
+									)}
+								</button>
+							);
+						})()}
+					</div>
 				</div>
 			</div>
-		</div>
+			{showPostMoodCheckIn && (
+				<MoodCheckIn
+					type='post'
+					onComplete={handlePostMoodComplete}
+					onSkip={handlePostMoodSkip}
+					initialRating={preSessionMood?.rating || 5}
+				/>
+			)}
+		</>
 	);
 }

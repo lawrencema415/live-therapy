@@ -1,3 +1,5 @@
+import Link from 'next/link';
+
 interface JoinScreenProps {
 	userName: string;
 	onUserNameChange: (name: string) => void;
@@ -114,6 +116,17 @@ export function JoinScreen({
 						<p className='text-sm text-gray-500 text-center mt-2'>
 							Connecting to AI therapist, please wait...
 						</p>
+					)}
+
+					{hasPreviousSession && (
+						<div className='mt-4 pt-4 border-t border-gray-200'>
+							<Link
+								href='/dashboard'
+								className='block text-center text-sm text-blue-600 hover:text-blue-700 font-medium'
+							>
+								View Your Progress Dashboard →
+							</Link>
+						</div>
 					)}
 				</div>
 			</div>

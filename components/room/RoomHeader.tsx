@@ -1,8 +1,11 @@
+import Link from 'next/link';
+
 interface RoomHeaderProps {
 	roomName: string; // Actually userName now
 	onEndCall: () => void;
 	isAgentConnected?: boolean;
 	isSaving?: boolean;
+	showDashboardLink?: boolean;
 }
 
 export function RoomHeader({
@@ -10,6 +13,7 @@ export function RoomHeader({
 	onEndCall,
 	isAgentConnected = false,
 	isSaving = false,
+	showDashboardLink = true,
 }: RoomHeaderProps) {
 	return (
 		<div className='bg-white rounded-lg shadow-lg p-4 sm:p-6 mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4'>
@@ -46,9 +50,19 @@ export function RoomHeader({
 						</span>
 					)}
 				</div>
-				<p className='text-sm sm:text-base text-gray-600 truncate'>
-					Patient: {roomName}
-				</p>
+				<div className='flex items-center gap-3'>
+					<p className='text-sm sm:text-base text-gray-600 truncate'>
+						Patient: {roomName}
+					</p>
+					{showDashboardLink && (
+						<Link
+							href='/dashboard'
+							className='text-sm text-blue-600 hover:text-blue-700 font-medium'
+						>
+							View Dashboard →
+						</Link>
+					)}
+				</div>
 			</div>
 			<button
 				onClick={onEndCall}

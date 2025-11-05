@@ -24,6 +24,24 @@ export interface SessionSummary {
 }
 
 /**
+ * Mood check-in data structure
+ */
+export interface MoodCheckInData {
+	rating: number;
+	notes?: string;
+	timestamp: number;
+}
+
+/**
+ * Session mood data (pre and post)
+ */
+export interface SessionMoodData {
+	preSession?: MoodCheckInData;
+	postSession?: MoodCheckInData;
+	sessionTimestamp: number;
+}
+
+/**
  * User session data structure
  */
 export interface UserSessionData {
@@ -31,6 +49,7 @@ export interface UserSessionData {
 	transcripts: StoredTranscript[];
 	summaries: SessionSummary[];
 	lastSessionDate: number;
+	moodData: SessionMoodData[]; // Array of mood check-ins per session
 }
 
 /**
@@ -63,11 +82,15 @@ export function saveUserSession(userName: string, transcripts: TranscriptMessage
 		const existingSession = loadUserSession(userName);
 		const existingSummaries = existingSession?.summaries || [];
 
+		// Preserve existing mood data
+		const existingMoodData = existingSession?.moodData || [];
+
 		const sessionData: UserSessionData = {
 			userName: userName.trim(),
 			transcripts: storedTranscripts,
 			summaries: existingSummaries, // Preserve existing summaries
 			lastSessionDate: Date.now(),
+			moodData: existingMoodData, // Preserve existing mood data
 		};
 
 		localStorage.setItem(key, JSON.stringify(sessionData));
@@ -145,6 +168,7 @@ export function saveSessionSummaries(userName: string, summaries: SessionSummary
 			transcripts: existingSession?.transcripts || [],
 			summaries: summaries, // Keep only last 10 summaries
 			lastSessionDate: existingSession?.lastSessionDate || Date.now(),
+			moodData: existingSession?.moodData || [], // Preserve existing mood data
 		};
 
 		localStorage.setItem(key, JSON.stringify(sessionData));
@@ -163,6 +187,74 @@ export function loadSessionSummaries(userName: string): SessionSummary[] {
 		return session?.summaries || [];
 	} catch (error) {
 		console.error('[UserSession] Error loading summaries:', error);
+		return [];
+	}
+}
+
+/**
+ * Save mood check-in data for a session
+ */
+export function saveMoodCheckIn(
+	userName: string,
+	type: 'pre' | 'post',
+	moodData: MoodCheckInData
+): void {
+	try {
+		const session = loadUserSession(userName) || {
+			userName: userName.trim(),
+			transcripts: [],
+			summaries: [],
+			lastSessionDate: Date.now(),
+			moodData: [],
+		};
+
+		const now = Date.now();
+		const sessionWindow = 5 * 60 * 1000; // 5 minutes window for same session
+
+		// Find existing session mood data for today (within 5 min window)
+		let foundSession = false;
+		const updatedMoodData = session.moodData.map((mood) => {
+			if (Math.abs(mood.sessionTimestamp - now) < sessionWindow) {
+				foundSession = true;
+				return {
+					...mood,
+					[type === 'pre' ? 'preSession' : 'postSession']: moodData,
+					sessionTimestamp: mood.sessionTimestamp || now,
+				};
+			}
+			return mood;
+		});
+
+		if (!foundSession) {
+			// Create new session mood entry
+			updatedMoodData.push({
+				[type === 'pre' ? 'preSession' : 'postSession']: moodData,
+				sessionTimestamp: now,
+			});
+		}
+
+		const updatedSession: UserSessionData = {
+			...session,
+			moodData: updatedMoodData,
+		};
+
+		const key = getUserKey(userName);
+		localStorage.setItem(key, JSON.stringify(updatedSession));
+		console.log(`[UserSession] Saved ${type}-session mood check-in for ${userName}`);
+	} catch (error) {
+		console.error('[UserSession] Error saving mood check-in:', error);
+	}
+}
+
+/**
+ * Load all mood check-in data for a user
+ */
+export function loadMoodData(userName: string): SessionMoodData[] {
+	try {
+		const session = loadUserSession(userName);
+		return session?.moodData || [];
+	} catch (error) {
+		console.error('[UserSession] Error loading mood data:', error);
 		return [];
 	}
 }
