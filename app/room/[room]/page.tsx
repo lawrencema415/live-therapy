@@ -42,6 +42,7 @@ export default function TherapyPage() {
 		isConnecting,
 		isWaitingForAgent,
 		isMuted,
+		isAgentConnected,
 		connectToRoom,
 		disconnect,
 		toggleMute,
@@ -564,6 +565,7 @@ export default function TherapyPage() {
 					<RoomHeader
 						patientName={userName}
 						onEndCall={handleEndCall}
+						isAgentConnected={isAgentConnected}
 						isSaving={isSaving}
 						showDashboardLink={false}
 					/>
