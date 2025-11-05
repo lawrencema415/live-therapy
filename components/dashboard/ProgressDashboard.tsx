@@ -2,6 +2,7 @@
 
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { capitalize } from 'lodash';
 import type {
 	SessionSummary,
 	SessionMoodData,
@@ -118,7 +119,7 @@ export function ProgressDashboard({
 					</button>
 				</div>
 				<p className='text-sm sm:text-base text-slate-600 mt-1'>
-					Welcome, {userName}
+					Welcome, {capitalize(userName)}
 				</p>
 			</div>
 

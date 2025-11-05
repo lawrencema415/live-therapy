@@ -1,7 +1,8 @@
 import Link from 'next/link';
+import { capitalize } from 'lodash';
 
 interface RoomHeaderProps {
-	roomName: string; // Actually userName now
+	patientName: string;
 	onEndCall: () => void;
 	isAgentConnected?: boolean;
 	isSaving?: boolean;
@@ -9,7 +10,7 @@ interface RoomHeaderProps {
 }
 
 export function RoomHeader({
-	roomName,
+	patientName,
 	onEndCall,
 	isAgentConnected = false,
 	isSaving = false,
@@ -52,7 +53,7 @@ export function RoomHeader({
 				</div>
 				<div className='flex items-center gap-3'>
 					<p className='text-sm sm:text-base text-gray-600 truncate'>
-						Patient: {roomName}
+						Patient: {capitalize(patientName)}
 					</p>
 					{showDashboardLink && (
 						<Link

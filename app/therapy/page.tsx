@@ -486,10 +486,11 @@ export default function TherapyPage() {
 		<div className='min-h-screen p-6'>
 			<div className='max-w-4xl mx-auto'>
 				<RoomHeader
-					roomName={userName}
+					patientName={userName}
 					onEndCall={handleEndCall}
 					isAgentConnected={isAgentConnected}
 					isSaving={isSaving}
+					showDashboardLink={false}
 				/>
 				<div className='relative'>
 					<TranscriptList transcripts={transcriptHook.transcripts} />
