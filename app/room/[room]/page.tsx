@@ -115,6 +115,9 @@ export default function TherapyPage() {
 					const key = `therapy_user_${userName.trim().toLowerCase()}`;
 					localStorage.setItem(key, JSON.stringify(sessionData));
 
+					// Update hasPreviousSession since we just saved session data
+					setHasPreviousSession(true);
+
 					// Note: Don't set isSaving here - this useEffect is for automatic disconnects only
 					// User-initiated saves are handled in handleEndCall
 
@@ -310,6 +313,25 @@ export default function TherapyPage() {
 		}
 	}, [userName]);
 
+	// Re-check for previous session when returning to home page (after disconnect)
+	// This ensures the dashboard link appears after the first session ends
+	useEffect(() => {
+		if (!isConnected && userName.trim()) {
+			// Use a small delay to ensure localStorage has been updated
+			const checkTimer = setTimeout(() => {
+				const session = loadUserSession(userName.trim());
+				const hasSession = session !== null && (
+					session.transcripts.length > 0 ||
+					session.summaries.length > 0 ||
+					(session.moodData && session.moodData.length > 0)
+				);
+				setHasPreviousSession(hasSession);
+			}, 100);
+
+			return () => clearTimeout(checkTimer);
+		}
+	}, [isConnected, userName]);
+
 	const handleJoin = async () => {
 		if (!userName.trim()) return;
 
@@ -429,6 +451,9 @@ export default function TherapyPage() {
 
 			const key = `therapy_user_${userName.trim().toLowerCase()}`;
 			localStorage.setItem(key, JSON.stringify(sessionData));
+
+			// Immediately update hasPreviousSession since we just saved data
+			setHasPreviousSession(true);
 
 			// Mark saving as complete (localStorage save is done, summary is async)
 			setIsSaving(false);
