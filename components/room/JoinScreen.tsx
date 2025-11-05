@@ -29,14 +29,6 @@ export function JoinScreen({
 					Join a live therapy session with an AI therapist
 				</p>
 
-				{hasPreviousSession && (
-					<div className='mb-4 p-3 bg-blue-50 border border-blue-200 rounded-lg'>
-						<p className='text-sm text-blue-800'>
-							Welcome back! Your previous conversations will be remembered.
-						</p>
-					</div>
-				)}
-
 				<div className='space-y-4'>
 					<div>
 						<label
@@ -59,6 +51,11 @@ export function JoinScreen({
 							className='w-full px-4 py-2 border text-black border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent'
 							disabled={isConnecting}
 						/>
+						{hasPreviousSession && (
+							<p className='mt-2 text-xs text-blue-600 whitespace-nowrap'>
+								Welcome back! Your previous conversations will be remembered.
+							</p>
+						)}
 					</div>
 
 					<div className='flex items-center'>

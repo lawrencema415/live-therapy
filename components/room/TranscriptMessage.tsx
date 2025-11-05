@@ -21,9 +21,9 @@ export function TranscriptMessageComponent({
 					<div className='text-xs font-semibold opacity-70'>{displayName}</div>
 					<div className='text-xs opacity-50'>
 						{new Date(message.timestamp).toLocaleTimeString([], {
-							hour: '2-digit',
+							hour: 'numeric',
 							minute: '2-digit',
-							second: '2-digit',
+							hour12: true,
 						})}
 					</div>
 				</div>

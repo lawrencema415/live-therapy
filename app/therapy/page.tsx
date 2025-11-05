@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { Mic, MicOff } from 'lucide-react';
 import { useRoomConnection } from '@/hooks/useRoomConnection';
 import { useTranscripts } from '@/hooks/useTranscripts';
 import { JoinScreen } from '@/components/room/JoinScreen';
@@ -32,8 +33,10 @@ export default function TherapyPage() {
 		isConnecting,
 		isAgentConnected,
 		isWaitingForAgent,
+		isMuted,
 		connectToRoom,
 		disconnect,
+		toggleMute,
 		getRoom,
 	} = useRoomConnection({
 		onTranscriptsUpdate: (transcripts) => {
@@ -477,7 +480,20 @@ export default function TherapyPage() {
 					onEndCall={handleEndCall}
 					isAgentConnected={isAgentConnected}
 				/>
-				<TranscriptList transcripts={transcriptHook.transcripts} />
+				<div className='relative'>
+					<TranscriptList transcripts={transcriptHook.transcripts} />
+					<button
+						onClick={toggleMute}
+						className='absolute bottom-6 right-6 bg-white hover:bg-gray-100 border-2 border-gray-300 rounded-full p-3 shadow-lg transition-all duration-200 flex items-center justify-center z-10'
+						title={isMuted ? 'Unmute microphone' : 'Mute microphone'}
+					>
+						{isMuted ? (
+							<MicOff className='h-6 w-6 text-red-600' />
+						) : (
+							<Mic className='h-6 w-6 text-gray-700' />
+						)}
+					</button>
+				</div>
 			</div>
 		</div>
 	);
