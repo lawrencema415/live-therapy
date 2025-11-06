@@ -2,7 +2,6 @@ import Link from 'next/link';
 
 interface JoinScreenProps {
 	userName: string;
-	onUserNameChange: (name: string) => void;
 	onJoin: () => void;
 	isConnecting: boolean;
 	isWaitingForAgent?: boolean;
