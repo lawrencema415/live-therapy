@@ -12,7 +12,6 @@ interface JoinScreenProps {
 
 export function JoinScreen({
 	userName,
-	onUserNameChange,
 	onJoin,
 	isConnecting,
 	isWaitingForAgent = false,
@@ -20,9 +19,9 @@ export function JoinScreen({
 	onLogout,
 }: JoinScreenProps) {
 	return (
-		<div className='min-h-screen flex items-center justify-center p-4 sm:p-6'>
-			<div className='bg-white rounded-2xl shadow-xl p-6 sm:p-8 max-w-md w-full border border-slate-200'>
-				<div className='text-center mb-6'>
+		<div className='min-h-screen flex items-center justify-center p-4 sm:p-6 bg-linear-to-br from-blue-50 via-purple-50 to-pink-50'>
+			<div className='bg-white rounded-3xl shadow-2xl p-8 sm:p-10 max-w-md w-full border border-slate-100'>
+				<div className='text-center mb-8'>
 					<h1 className='text-3xl sm:text-4xl font-bold text-slate-800 mb-2'>
 						Live Therapy
 					</h1>
@@ -31,39 +30,56 @@ export function JoinScreen({
 					</p>
 				</div>
 
-				<div className='space-y-5'>
-					<div>
-						<label
-							htmlFor='userName'
-							className='block text-sm font-medium text-slate-700 mb-2'
-						>
-							Your Name
-						</label>
-						<input
-							id='userName'
-							type='text'
-							value={userName}
-							onChange={(e) => onUserNameChange(e.target.value)}
-							onKeyDown={(e) => {
-								if (e.key === 'Enter' && !isConnecting) {
-									onJoin();
-								}
-							}}
-							placeholder='Enter your name'
-							className='w-full px-4 py-3 border text-slate-900 border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all'
-							disabled={isConnecting}
-						/>
+				<div className='space-y-6'>
+					<div className='bg-linear-to-r from-blue-50 to-purple-50 rounded-2xl p-5 border border-blue-100'>
+						<div className='flex items-center gap-3'>
+							<div className='shrink-0 w-12 h-12 bg-white rounded-full flex items-center justify-center shadow-sm'>
+								<span className='text-xl font-semibold text-blue-600'>
+									{userName.charAt(0).toUpperCase()}
+								</span>
+							</div>
+							<div className='flex-1 min-w-0'>
+								<p className='text-xs text-slate-500 font-medium mb-0.5'>
+									Signed in as
+								</p>
+								<p className='text-lg font-semibold text-slate-800 truncate'>
+									{userName}
+								</p>
+							</div>
+							{onLogout && (
+								<button
+									onClick={onLogout}
+									disabled={isConnecting}
+									className='cursor-pointer shrink-0 text-xs text-slate-600 hover:text-slate-800 hover:bg-white/80 font-medium py-2 px-3 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-slate-200 hover:border-slate-300'
+								>
+									Logout
+								</button>
+							)}
+						</div>
 						{hasPreviousSession && (
-							<p className='mt-2 text-xs text-blue-600'>
-								Welcome back! Your previous conversations will be remembered.
-							</p>
+							<div className='mt-3 pt-3 border-t border-blue-200/50'>
+								<p className='text-xs text-blue-700 flex items-center gap-1.5'>
+									<svg
+										className='w-3.5 h-3.5'
+										fill='currentColor'
+										viewBox='0 0 20 20'
+									>
+										<path
+											fillRule='evenodd'
+											d='M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z'
+											clipRule='evenodd'
+										/>
+									</svg>
+									Welcome back! Your previous sessions are saved.
+								</p>
+							</div>
 						)}
 					</div>
 
 					<button
 						onClick={onJoin}
 						disabled={isConnecting || !userName.trim()}
-						className='cursor-pointer w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-semibold py-3.5 px-6 rounded-xl transition-all duration-200 flex items-center justify-center shadow-lg shadow-blue-500/20 hover:shadow-blue-500/30 disabled:shadow-none'
+						className='cursor-pointer w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-2xl transition-all duration-200 flex items-center justify-center shadow-xl shadow-blue-500/25 hover:shadow-blue-500/40 disabled:shadow-none'
 					>
 						{isConnecting || isWaitingForAgent ? (
 							<>
@@ -88,35 +104,42 @@ export function JoinScreen({
 									></path>
 								</svg>
 								{isWaitingForAgent
-									? 'Waiting for AI therapist...'
+									? 'Connecting to therapist...'
 									: 'Connecting...'}
 							</>
 						) : (
-							'Start Therapy Session'
+							<>
+								<svg
+									className='w-5 h-5 mr-2'
+									fill='none'
+									stroke='currentColor'
+									viewBox='0 0 24 24'
+								>
+									<path
+										strokeLinecap='round'
+										strokeLinejoin='round'
+										strokeWidth={2}
+										d='M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z'
+									/>
+								</svg>
+								Start Therapy Session
+							</>
 						)}
 					</button>
 
 					{isWaitingForAgent && (
-						<p className='text-sm text-slate-500 text-center -mt-1'>
-							Connecting to AI therapist, please wait...
+						<p className='text-sm text-slate-500 text-center -mt-2 flex items-center justify-center gap-2'>
+							<span className='inline-block w-2 h-2 bg-blue-500 rounded-full animate-pulse'></span>
+							Finding an available therapist...
 						</p>
 					)}
 
-					{onLogout && (
-						<button
-							onClick={onLogout}
-							disabled={isConnecting}
-							className='cursor-pointer w-full text-slate-500 hover:text-slate-700 hover:bg-slate-50 font-medium py-2.5 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-slate-200 hover:border-slate-300'
-						>
-							Logout
-						</button>
-					)}
-					<div className='pt-5 border-t border-slate-200'>
+					<div>
 						<Link
 							href='/dashboard'
-							className='block text-center text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors'
+							className='block w-full text-center text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-medium py-3 px-4 rounded-xl transition-all border border-blue-200 hover:border-blue-300'
 						>
-							Wellness Dashboard →
+							Dashboard
 						</Link>
 					</div>
 				</div>
