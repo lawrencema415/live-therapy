@@ -1,16 +1,17 @@
-// User session storage utility - memstorage using localStorage
+// User session storage utility - using Supabase
 // Stores user data including name and conversation history
 
 import type { TranscriptMessage, StoredTranscript } from '@/types/room';
-
-const STORAGE_PREFIX = 'therapy_user_';
-
-/**
- * Get storage key for a user
- */
-function getUserKey(userName: string): string {
-	return `${STORAGE_PREFIX}${userName.toLowerCase().trim()}`;
-}
+import {
+	getOrCreateSession,
+	saveTranscripts as saveTranscriptsToDB,
+	loadRecentTranscripts,
+	loadTranscripts,
+	saveSummaries as saveSummariesToDB,
+	loadSummaries as loadSummariesFromDB,
+	saveMoodData as saveMoodDataToDB,
+	loadMoodData as loadMoodDataFromDB,
+} from '@/utils/supabaseDatabase';
 
 /**
  * Session summary structure (matches agent format)
@@ -53,12 +54,10 @@ export interface UserSessionData {
 }
 
 /**
- * Save user session data to localStorage
+ * Save user session data to Supabase
  */
-export function saveUserSession(userName: string, transcripts: TranscriptMessage[]): void {
+export async function saveUserSession(userName: string, transcripts: TranscriptMessage[]): Promise<void> {
 	try {
-		const key = getUserKey(userName);
-		
 		// Log transcript breakdown for debugging
 		const agentCount = transcripts.filter(t => t.speaker === 'agent').length;
 		const userCount = transcripts.filter(t => t.speaker === 'user').length;
@@ -78,22 +77,15 @@ export function saveUserSession(userName: string, transcripts: TranscriptMessage
 		const storedUserCount = storedTranscripts.filter(t => t.role === 'user').length;
 		console.log(`[UserSession] Stored transcripts - Total: ${storedTranscripts.length}, Assistant: ${storedAgentCount}, User: ${storedUserCount}`);
 
-		// Load existing summaries if any
-		const existingSession = loadUserSession(userName);
-		const existingSummaries = existingSession?.summaries || [];
+		// Get or create session
+		const sessionId = await getOrCreateSession();
+		if (!sessionId) {
+			console.error('[UserSession] Failed to get or create session');
+			return;
+		}
 
-		// Preserve existing mood data
-		const existingMoodData = existingSession?.moodData || [];
-
-		const sessionData: UserSessionData = {
-			userName: userName.trim(),
-			transcripts: storedTranscripts,
-			summaries: existingSummaries, // Preserve existing summaries
-			lastSessionDate: Date.now(),
-			moodData: existingMoodData, // Preserve existing mood data
-		};
-
-		localStorage.setItem(key, JSON.stringify(sessionData));
+		// Save transcripts to Supabase
+		await saveTranscriptsToDB(sessionId, storedTranscripts);
 		console.log(`[UserSession] ✓ Saved session for ${userName}: ${storedTranscripts.length} transcripts (${storedAgentCount} assistant, ${storedUserCount} user)`);
 	} catch (error) {
 		console.error('[UserSession] Error saving session:', error);
@@ -101,21 +93,27 @@ export function saveUserSession(userName: string, transcripts: TranscriptMessage
 }
 
 /**
- * Load user session data from localStorage
+ * Load user session data from Supabase
+ * Returns a UserSessionData object with transcripts, summaries, and mood data
  */
-export function loadUserSession(userName: string): UserSessionData | null {
+export async function loadUserSession(userName: string): Promise<UserSessionData | null> {
 	try {
-		const key = getUserKey(userName);
-		const data = localStorage.getItem(key);
-		if (!data) {
-			return null;
-		}
+		// Load transcripts, summaries, and mood data from Supabase
+		const transcripts = await loadRecentTranscripts();
+		const summaries = await loadSummariesFromDB(10);
+		const moodData = await loadMoodDataFromDB();
 
-		const sessionData: UserSessionData = JSON.parse(data);
-		const agentCount = sessionData.transcripts?.filter(t => t.role === 'assistant').length || 0;
-		const userCount = sessionData.transcripts?.filter(t => t.role === 'user').length || 0;
-		console.log(`[UserSession] Loaded session for ${userName}: ${sessionData.transcripts?.length || 0} transcripts (${agentCount} assistant, ${userCount} user), ${sessionData.summaries.length} summaries`);
-		return sessionData;
+		const agentCount = transcripts.filter(t => t.role === 'assistant').length;
+		const userCount = transcripts.filter(t => t.role === 'user').length;
+		console.log(`[UserSession] Loaded session for ${userName}: ${transcripts.length} transcripts (${agentCount} assistant, ${userCount} user), ${summaries.length} summaries`);
+
+		return {
+			userName: userName.trim(),
+			transcripts,
+			summaries,
+			lastSessionDate: Date.now(),
+			moodData,
+		};
 	} catch (error) {
 		console.error('[UserSession] Error loading session:', error);
 		return null;
@@ -156,35 +154,32 @@ export function sanitizeTranscripts(transcripts: StoredTranscript[]): StoredTran
 }
 
 /**
- * Save session summaries to localStorage
+ * Save session summaries to Supabase
  */
-export function saveSessionSummaries(userName: string, summaries: SessionSummary[]): void {
+export async function saveSessionSummaries(userName: string, summaries: SessionSummary[]): Promise<void> {
 	try {
-		const key = getUserKey(userName);
-		const existingSession = loadUserSession(userName);
-		
-		const sessionData: UserSessionData = {
-			userName: userName.trim(),
-			transcripts: existingSession?.transcripts || [],
-			summaries: summaries, // Keep only last 10 summaries
-			lastSessionDate: existingSession?.lastSessionDate || Date.now(),
-			moodData: existingSession?.moodData || [], // Preserve existing mood data
-		};
+		// Get or create session
+		const sessionId = await getOrCreateSession();
+		if (!sessionId) {
+			console.error('[UserSession] Failed to get or create session for summaries');
+			return;
+		}
 
-		localStorage.setItem(key, JSON.stringify(sessionData));
-		console.log(`[UserSession] Saved ${summaries.length} summaries for ${userName}`);
+		// Keep only last 10 summaries
+		const summariesToSave = summaries.slice(-10);
+		await saveSummariesToDB(sessionId, summariesToSave);
+		console.log(`[UserSession] Saved ${summariesToSave.length} summaries for ${userName}`);
 	} catch (error) {
 		console.error('[UserSession] Error saving summaries:', error);
 	}
 }
 
 /**
- * Load session summaries from localStorage
+ * Load session summaries from Supabase
  */
-export function loadSessionSummaries(userName: string): SessionSummary[] {
+export async function loadSessionSummaries(userName: string): Promise<SessionSummary[]> {
 	try {
-		const session = loadUserSession(userName);
-		return session?.summaries || [];
+		return await loadSummariesFromDB(10);
 	} catch (error) {
 		console.error('[UserSession] Error loading summaries:', error);
 		return [];
@@ -192,54 +187,23 @@ export function loadSessionSummaries(userName: string): SessionSummary[] {
 }
 
 /**
- * Save mood check-in data for a session
+ * Save mood check-in data for a session to Supabase
  */
-export function saveMoodCheckIn(
+export async function saveMoodCheckIn(
 	userName: string,
 	type: 'pre' | 'post',
 	moodData: MoodCheckInData
-): void {
+): Promise<void> {
 	try {
-		const session = loadUserSession(userName) || {
-			userName: userName.trim(),
-			transcripts: [],
-			summaries: [],
-			lastSessionDate: Date.now(),
-			moodData: [],
-		};
-
-		const now = Date.now();
-		const sessionWindow = 5 * 60 * 1000; // 5 minutes window for same session
-
-		// Find existing session mood data for today (within 5 min window)
-		let foundSession = false;
-		const updatedMoodData = session.moodData.map((mood) => {
-			if (Math.abs(mood.sessionTimestamp - now) < sessionWindow) {
-				foundSession = true;
-				return {
-					...mood,
-					[type === 'pre' ? 'preSession' : 'postSession']: moodData,
-					sessionTimestamp: mood.sessionTimestamp || now,
-				};
-			}
-			return mood;
-		});
-
-		if (!foundSession) {
-			// Create new session mood entry
-			updatedMoodData.push({
-				[type === 'pre' ? 'preSession' : 'postSession']: moodData,
-				sessionTimestamp: now,
-			});
+		// Get or create session
+		const sessionId = await getOrCreateSession();
+		if (!sessionId) {
+			console.error('[UserSession] Failed to get or create session for mood data');
+			return;
 		}
 
-		const updatedSession: UserSessionData = {
-			...session,
-			moodData: updatedMoodData,
-		};
-
-		const key = getUserKey(userName);
-		localStorage.setItem(key, JSON.stringify(updatedSession));
+		const sessionTimestamp = Date.now();
+		await saveMoodDataToDB(sessionId, sessionTimestamp, type, moodData);
 		console.log(`[UserSession] Saved ${type}-session mood check-in for ${userName}`);
 	} catch (error) {
 		console.error('[UserSession] Error saving mood check-in:', error);
@@ -247,12 +211,11 @@ export function saveMoodCheckIn(
 }
 
 /**
- * Load all mood check-in data for a user
+ * Load all mood check-in data for a user from Supabase
  */
-export function loadMoodData(userName: string): SessionMoodData[] {
+export async function loadMoodData(userName: string): Promise<SessionMoodData[]> {
 	try {
-		const session = loadUserSession(userName);
-		return session?.moodData || [];
+		return await loadMoodDataFromDB();
 	} catch (error) {
 		console.error('[UserSession] Error loading mood data:', error);
 		return [];

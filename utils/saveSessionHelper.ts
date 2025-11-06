@@ -1,6 +1,8 @@
 // Helper function for saving session transcripts
-import { loadUserSession } from './userSessionStorage';
+import { loadSessionSummaries, saveSessionSummaries } from './userSessionStorage';
+import { getOrCreateSession, saveTranscripts } from './supabaseDatabase';
 import type { TranscriptMessage } from '@/types/room';
+import type { StoredTranscript } from '@/types/room';
 
 interface SaveSessionParams {
 	userName: string;
@@ -9,7 +11,7 @@ interface SaveSessionParams {
 }
 
 /**
- * Save session transcripts to localStorage and generate summary
+ * Save session transcripts to Supabase and generate summary
  */
 export async function saveSessionTranscripts({
 	userName,
@@ -21,7 +23,7 @@ export async function saveSessionTranscripts({
 	}
 
 	// Sanitize: exclude system messages (crisis resources) from saved transcripts
-	const sanitized = transcripts
+	const sanitized: StoredTranscript[] = transcripts
 		.filter((t) => t.speaker !== 'system' && (t.isFinal || t.speaker === 'agent'))
 		.map((t) => ({
 			role: t.speaker === 'agent' ? 'assistant' : t.speaker,
@@ -33,20 +35,15 @@ export async function saveSessionTranscripts({
 		return;
 	}
 
-	// Load existing session data
-	const existingSession = loadUserSession(userName);
-	const existingSummaries = existingSession?.summaries || [];
+	// Get or create session
+	const sessionId = await getOrCreateSession();
+	if (!sessionId) {
+		console.error('[SessionSave] Failed to get or create session');
+		return;
+	}
 
-	// Save to localStorage
-	const sessionData = {
-		userName: userName.trim(),
-		transcripts: sanitized,
-		summaries: existingSummaries,
-		lastSessionDate: Date.now(),
-	};
-
-	const key = `therapy_user_${userName.trim().toLowerCase()}`;
-	localStorage.setItem(key, JSON.stringify(sessionData));
+	// Save transcripts to Supabase
+	await saveTranscripts(sessionId, sanitized);
 
 	console.log(
 		`[SessionSave] Saved ${sanitized.length} transcripts (Agent: ${
@@ -72,12 +69,10 @@ export async function saveSessionTranscripts({
 				const data = await response.json();
 				const summary = data.summary;
 				if (summary) {
+					// Load existing summaries and add new one
+					const existingSummaries = await loadSessionSummaries(userName);
 					const updatedSummaries = [...existingSummaries, summary].slice(-10);
-					const updatedSessionData = {
-						...sessionData,
-						summaries: updatedSummaries,
-					};
-					localStorage.setItem(key, JSON.stringify(updatedSessionData));
+					await saveSessionSummaries(userName, updatedSummaries);
 					console.log(`[SessionSave] ✓ Generated and saved summary for ${userName}`);
 				}
 			} else {

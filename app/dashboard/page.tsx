@@ -31,11 +31,12 @@ export default function DashboardPage() {
 		}
 	}, [user]);
 
-	const loadDashboardData = (name: string) => {
+	const loadDashboardData = async (name: string) => {
 		try {
-			const session = loadUserSession(name);
-			const loadedSummaries = loadSessionSummaries(name);
-			const loadedMoodData = loadMoodData(name);
+			const [loadedSummaries, loadedMoodData] = await Promise.all([
+				loadSessionSummaries(name),
+				loadMoodData(name),
+			]);
 
 			setSummaries(loadedSummaries);
 			setMoodData(loadedMoodData);

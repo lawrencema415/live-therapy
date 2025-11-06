@@ -114,12 +114,12 @@ function TherapyPageContent() {
 	);
 
 	const handleSummariesReceived = useCallback(
-		(summaries: SessionSummary[]) => {
+		async (summaries: SessionSummary[]) => {
 			// Save summaries when received from agent
 			if (userName && summaries.length > 0) {
 				// Keep only last 10 summaries
 				const summariesToKeep = summaries.slice(-10);
-				saveSessionSummaries(userName, summariesToKeep);
+				await saveSessionSummaries(userName, summariesToKeep);
 				console.log(
 					`[TherapyPage] Saved ${summariesToKeep.length} summaries from agent`
 				);
@@ -223,59 +223,47 @@ function TherapyPageContent() {
 
 
 	// Check for previous session when userName changes or after disconnect
-	// Derive value synchronously when connected, use async check when disconnected
-	const previousSessionValue = useMemo(() => {
-		if (!isClient() || !userName.trim()) {
-			return false;
-		}
-		const session = loadUserSession(userName.trim());
-		return (
-			session !== null &&
-			(session.transcripts.length > 0 ||
-				session.summaries.length > 0 ||
-				(session.moodData && session.moodData.length > 0))
-		);
-	}, [userName]);
+	// Use async check since loadUserSession is now async
+	const [previousSessionValue, setPreviousSessionValue] = useState(false);
 
-	// Track previous value to avoid unnecessary updates
-	const previousValueRef = useRef(previousSessionValue);
-
-	// Update state based on derived value when connected (only if changed)
-	useEffect(() => {
-		if (isConnected && previousValueRef.current !== previousSessionValue) {
-			previousValueRef.current = previousSessionValue;
-			// Use requestAnimationFrame to defer setState
-			requestAnimationFrame(() => {
-				setHasPreviousSession(previousSessionValue);
-			});
-		}
-	}, [isConnected, previousSessionValue]);
-
-	// Async check when disconnected (localStorage may not be updated yet)
+	// Check for previous session data asynchronously (with debounce to prevent multiple calls)
 	useClientEffect(() => {
-		if (!isConnected && userName.trim()) {
-			const checkTimer = setTimeout(() => {
-				const session = loadUserSession(userName.trim());
+		if (!userName.trim()) {
+			setPreviousSessionValue(false);
+			setHasPreviousSession(false);
+			return;
+		}
+
+		let isCancelled = false;
+		const timeoutId = setTimeout(() => {
+			loadUserSession(userName.trim()).then((session) => {
+				if (isCancelled) return;
+				
 				const hasSession =
 					session !== null &&
 					(session.transcripts.length > 0 ||
 						session.summaries.length > 0 ||
 						(session.moodData && session.moodData.length > 0));
+				setPreviousSessionValue(hasSession);
 				setHasPreviousSession(hasSession);
-			}, 100);
-			return () => clearTimeout(checkTimer);
-		}
-	}, [userName, isConnected]);
+			});
+		}, 300); // Debounce by 300ms
+
+		return () => {
+			isCancelled = true;
+			clearTimeout(timeoutId);
+		};
+	}, [userName]);
 
 	const handleJoin = useCallback(async () => {
 		if (!userName.trim()) return;
 
 		try {
 			// Load previous session data (transcripts + summaries)
-			const session = loadUserSession(userName.trim());
+			const session = await loadUserSession(userName.trim());
 			const previousTranscripts = session?.transcripts || [];
 			const allSummaries =
-				session?.summaries || loadSessionSummaries(userName.trim());
+				session?.summaries || await loadSessionSummaries(userName.trim());
 
 			// Only use the most recent summary to avoid URL size limits (431 errors)
 			const previousSummaries =
