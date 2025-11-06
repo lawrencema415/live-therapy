@@ -27,9 +27,7 @@ export function useRoomConnection({
 	const shouldAutoUnmuteRef = useRef(false);
 
 	const connectToRoom = useCallback(async (
-		userName: string, 
-		previousTranscripts: StoredTranscript[] = [],
-		previousSummaries?: SessionSummary[]
+		userName: string
 	) => {
 		if (!userName.trim() || isConnecting) {
 			return;
@@ -37,28 +35,9 @@ export function useRoomConnection({
 
 		setIsConnecting(true);
 		try {
-			// Use userName as identity
-			const identity = userName.trim();
-
-			// Get token from API with userName, previous transcripts, and summaries
-			const tokenParams = new URLSearchParams({
-				identity: identity,
-				userName: identity,
-			});
-
-			// Add previous transcripts as JSON if available
-			if (previousTranscripts.length > 0) {
-				tokenParams.append('previousTranscripts', JSON.stringify(previousTranscripts));
-			}
-
-			// Add previous summaries as JSON if available (only most recent to avoid URL size limits)
-			if (previousSummaries && previousSummaries.length > 0) {
-				// Only send the most recent summary to avoid 431 errors
-				const mostRecentSummary = previousSummaries[previousSummaries.length - 1];
-				tokenParams.append('previousSummaries', JSON.stringify([mostRecentSummary]));
-			}
-
-			const res = await fetch(`/api/token?${tokenParams.toString()}`);
+			// Get token from API - no need to send transcripts/summaries
+			// Agent will fetch them securely from Supabase using authenticated user ID
+			const res = await fetch('/api/token');
 
 			if (!res.ok) {
 				const errorData = await res
@@ -85,7 +64,7 @@ export function useRoomConnection({
 
 			console.log('Connecting to LiveKit:', livekitUrl);
 			console.log('User name:', userName.trim());
-			console.log('Previous transcripts:', previousTranscripts.length);
+			console.log('Agent will fetch transcripts/summaries from Supabase using authenticated user ID');
 
 			const currentRoom = new Room();
 			roomRef.current = currentRoom;
@@ -97,44 +76,10 @@ export function useRoomConnection({
 				numParticipants: currentRoom.numParticipants,
 			});
 
-			// Send user info via data track (since setAttributes requires permissions)
-			// The agent can read this from the data track or use identity (which is userName)
-			try {
-				// Always send user info, even if no previous data (for agent to identify user)
-				// Only send most recent summary to avoid payload size issues
-				const summariesToSend = previousSummaries && previousSummaries.length > 0
-					? [previousSummaries[previousSummaries.length - 1]]
-					: [];
-				
-				const userInfoData = {
-					type: 'user_info',
-					userName: userName.trim(),
-					previousTranscripts: previousTranscripts,
-					previousSummaries: summariesToSend,
-				};
-				
-				const data = new TextEncoder().encode(JSON.stringify(userInfoData));
-				await currentRoom.localParticipant.publishData(data, {
-					reliable: true,
-					topic: 'user_info',
-				});
-				
-				console.log(`[RoomConnection] ✓ Sent user info via data track: "${userName.trim()}" with ${previousTranscripts.length} transcripts and ${summariesToSend.length} summary (most recent only)`);
-				if (previousTranscripts.length > 0) {
-					console.log(`[RoomConnection] Sample transcripts:`, previousTranscripts.slice(0, 2).map(t => `${t.role}: ${t.text.substring(0, 30)}...`));
-				}
-				if (summariesToSend.length > 0) {
-					console.log(`[RoomConnection] Most recent summary:`, {
-						date: new Date(summariesToSend[0].timestamp).toLocaleDateString(),
-						themes: summariesToSend[0].keyThemes.slice(0, 2)
-					});
-				}
-				
-				console.log(`[RoomConnection] Participant identity: ${currentRoom.localParticipant.identity}`);
-			} catch (error) {
-				console.error('[RoomConnection] ✗ Error sending user info:', error);
-				// This is not critical - agent can still use identity as userName
-			}
+			// Note: No longer sending user info via data track
+			// Agent will fetch transcripts/summaries securely from Supabase using user ID from token metadata
+			console.log(`[RoomConnection] Participant identity: ${currentRoom.localParticipant.identity}`);
+			console.log(`[RoomConnection] Agent will fetch data from Supabase using authenticated user ID`);
 
 			// Listen for room disconnect events
 			currentRoom.on(RoomEvent.Disconnected, () => {

@@ -259,47 +259,15 @@ function TherapyPageContent() {
 		if (!userName.trim()) return;
 
 		try {
-			// Load previous session data (transcripts + summaries)
+			// No longer need to load transcripts/summaries here
+			// Agent will fetch them securely from Supabase using authenticated user ID
+			// Token route now handles authentication and includes user ID in token metadata
+			await connectToRoom(userName.trim());
+
+			// Load previous transcripts for UI display (from Supabase)
 			const session = await loadUserSession(userName.trim());
-			const previousTranscripts = session?.transcripts || [];
-			const allSummaries =
-				session?.summaries || await loadSessionSummaries(userName.trim());
-
-			// Only use the most recent summary to avoid URL size limits (431 errors)
-			const previousSummaries =
-				allSummaries.length > 0 ? [allSummaries[allSummaries.length - 1]] : [];
-
-			// Get token with summaries included
-			const tokenParams = new URLSearchParams({
-				identity: userName.trim(),
-				userName: userName.trim(),
-			});
-
-			if (previousTranscripts.length > 0) {
-				tokenParams.append(
-					'previousTranscripts',
-					JSON.stringify(previousTranscripts)
-				);
-			}
-
-			if (previousSummaries.length > 0) {
-				tokenParams.append(
-					'previousSummaries',
-					JSON.stringify(previousSummaries)
-				);
-			}
-
-			// Token is handled internally by connectToRoom
-			// Connect with user name, previous transcripts, and summaries (most recent only)
-			await connectToRoom(
-				userName.trim(),
-				previousTranscripts,
-				previousSummaries
-			);
-
-			// If there are previous transcripts, load them into the UI
-			if (previousTranscripts.length > 0) {
-				const messages = convertStoredToMessages(previousTranscripts);
+			if (session?.transcripts && session.transcripts.length > 0) {
+				const messages = convertStoredToMessages(session.transcripts);
 				transcriptHookRef.current.setTranscriptsFromStorage(messages);
 			}
 		} catch (error) {
