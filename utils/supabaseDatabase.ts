@@ -21,10 +21,9 @@ export async function getOrCreateSession(sessionTimestamp: number = Date.now()):
 			return null;
 		}
 
-		// Normalize to start of day for consistent session key
-		const sessionDate = new Date(sessionTimestamp);
-		sessionDate.setHours(0, 0, 0, 0);
-		const sessionKey = `${user.id}-${sessionDate.getTime()}`;
+		// Use actual timestamp for session key to allow multiple sessions per day
+		// Round to nearest minute to prevent race conditions for very rapid session starts
+		const sessionKey = `${user.id}-${Math.floor(sessionTimestamp / 60000)}`;
 
 		// Check if session creation is already in progress for this user/day
 		const existingCreation = ongoingSessionCreation.get(sessionKey);
@@ -36,55 +35,22 @@ export async function getOrCreateSession(sessionTimestamp: number = Date.now()):
 		// Create the session creation promise
 		const creationPromise = (async (): Promise<string | null> => {
 			try {
-				const nextDay = new Date(sessionDate);
-				nextDay.setDate(nextDay.getDate() + 1);
+				// Always create a new session for each therapy session
+				// This allows tracking multiple sessions per day separately
+				// Use the actual timestamp (not normalized to start of day) to ensure uniqueness
+				const actualSessionDate = new Date(sessionTimestamp);
 				
-				// Try to find existing session within the same day
-				const { data: existingSessions, error: selectError } = await supabase
-					.from('therapy_sessions')
-					.select('id')
-					.eq('user_id', user.id)
-					.gte('session_date', sessionDate.toISOString())
-					.lt('session_date', nextDay.toISOString())
-					.order('session_date', { ascending: false })
-					.limit(1);
-
-				if (selectError) {
-					console.error('[SupabaseDB] Error checking for existing session:', selectError);
-				}
-
-				if (existingSessions && existingSessions.length > 0) {
-					console.log(`[SupabaseDB] Found existing session: ${existingSessions[0].id}`);
-					return existingSessions[0].id;
-				}
-
-				// Create new session
+				// Create new session with actual timestamp
 				const { data: newSession, error: insertError } = await supabase
 					.from('therapy_sessions')
 					.insert({
 						user_id: user.id,
-						session_date: sessionDate.toISOString(), // Use normalized date
+						session_date: actualSessionDate.toISOString(), // Use actual timestamp, not normalized
 					})
 					.select('id')
 					.single();
 
 				if (insertError) {
-					// If it's a unique constraint violation, try to get the existing session
-					if (insertError.code === '23505' || insertError.message?.includes('duplicate')) {
-						console.log('[SupabaseDB] Session already exists (race condition), fetching existing...');
-						const { data: existingSessions } = await supabase
-							.from('therapy_sessions')
-							.select('id')
-							.eq('user_id', user.id)
-							.gte('session_date', sessionDate.toISOString())
-							.lt('session_date', nextDay.toISOString())
-							.order('session_date', { ascending: false })
-							.limit(1);
-						
-						if (existingSessions && existingSessions.length > 0) {
-							return existingSessions[0].id;
-						}
-					}
 					console.error('[SupabaseDB] Error creating session:', insertError);
 					return null;
 				}

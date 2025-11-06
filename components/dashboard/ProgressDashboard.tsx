@@ -1,13 +1,20 @@
 'use client';
 
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { capitalize } from 'lodash';
 import type {
 	SessionSummary,
 	SessionMoodData,
 } from '@/utils/userSessionStorage';
-import { TrendingUp, Activity, ArrowLeft } from 'lucide-react';
+import {
+	TrendingUp,
+	Activity,
+	ArrowLeft,
+	ChevronDown,
+	ChevronUp,
+} from 'lucide-react';
+import { MoodTrendsChart } from './MoodTrendsChart';
 
 interface ProgressDashboardProps {
 	userName: string;
@@ -21,6 +28,7 @@ export function ProgressDashboard({
 	moodData,
 }: ProgressDashboardProps) {
 	const router = useRouter();
+	const [isMoodTrendsOpen, setIsMoodTrendsOpen] = useState(false);
 
 	// Calculate emotional state trends
 	const emotionalTrends = useMemo(() => {
@@ -34,14 +42,25 @@ export function ProgressDashboard({
 		return trends.sort((a, b) => a.timestamp - b.timestamp);
 	}, [summaries]);
 
-	// Calculate mood rating trends
+	// Calculate mood rating trends - show ALL sessions, not grouped by date
 	const moodTrends = useMemo(() => {
 		const trends = moodData
 			.map((mood) => {
 				const preRating = mood.preSession?.rating;
 				const postRating = mood.postSession?.rating;
+				const sessionDate = new Date(mood.sessionTimestamp);
+				// Include time for same-day sessions to differentiate them
+				const dateStr = sessionDate.toLocaleDateString();
+				const timeStr = sessionDate.toLocaleTimeString([], {
+					hour: '2-digit',
+					minute: '2-digit',
+				});
+				// Use full date-time string to ensure uniqueness
+				const displayDate = `${dateStr} ${timeStr}`;
+
 				return {
-					date: new Date(mood.sessionTimestamp).toLocaleDateString(),
+					date: displayDate,
+					dateOnly: dateStr, // Keep date-only for grouping if needed
 					timestamp: mood.sessionTimestamp,
 					preRating,
 					postRating,
@@ -49,7 +68,7 @@ export function ProgressDashboard({
 				};
 			})
 			.filter((m) => m.preRating || m.postRating)
-			.sort((a, b) => a.timestamp - b.timestamp);
+			.sort((a, b) => a.timestamp - b.timestamp); // Sort by timestamp to show chronological order
 
 		return trends;
 	}, [moodData]);
@@ -92,19 +111,11 @@ export function ProgressDashboard({
 		};
 	}, [summaries, moodData, moodTrends]);
 
-	const getMoodColor = (rating: number | null | undefined): string => {
-		if (!rating) return 'bg-gray-200';
-		if (rating <= 3) return 'bg-red-500';
-		if (rating <= 5) return 'bg-yellow-500';
-		if (rating <= 7) return 'bg-blue-500';
-		return 'bg-green-500';
-	};
-
 	return (
 		<div className='h-screen flex flex-col from-slate-50 to-slate-100 overflow-hidden'>
 			{/* Header - Fixed */}
 			<div className='shrink-0 px-4 sm:px-6 py-4 sm:py-6 bg-white border-b border-slate-200'>
-				<div className='flex items-center gap-4 mb-2'></div>
+				<div className='flex items-center gap-4'></div>
 				<div className='flex flex-row space-x-1'>
 					<h1 className='text-2xl sm:text-3xl font-bold text-slate-800'>
 						Wellness Dashboard
@@ -251,80 +262,30 @@ export function ProgressDashboard({
 						)}
 					</div>
 
-					{/* Mood Trends - Full Width */}
+					{/* Mood Trends - Full Width (Collapsible) */}
 					{moodTrends.length > 0 && (
 						<div className='bg-white rounded-xl shadow-sm border border-slate-200 flex flex-col overflow-hidden'>
-							<div className='shrink-0 px-4 sm:px-6 py-4 border-b border-slate-200 bg-slate-50'>
+							<button
+								onClick={() => setIsMoodTrendsOpen(!isMoodTrendsOpen)}
+								className='shrink-0 px-4 sm:px-6 py-4 border-b border-slate-200 bg-slate-50 hover:bg-slate-100 transition-colors flex items-center justify-between w-full cursor-pointer'
+							>
 								<div className='flex items-center gap-2'>
 									<TrendingUp size={18} className='text-slate-600' />
 									<h2 className='text-base sm:text-lg font-bold text-slate-800'>
 										Mood Trends
 									</h2>
 								</div>
-							</div>
-							<div className='flex-1 overflow-y-auto p-4 sm:p-6 max-h-[400px]'>
-								<div className='space-y-4'>
-									{moodTrends.map((trend, index) => (
-										<div
-											key={index}
-											className='p-4 rounded-lg bg-slate-50 hover:bg-slate-100 transition-colors'
-										>
-											<div className='flex items-center justify-between mb-3'>
-												<span className='text-xs sm:text-sm font-medium text-slate-700'>
-													{trend.date}
-												</span>
-												{trend.change !== null && (
-													<span
-														className={`text-xs sm:text-sm font-bold px-3 py-1 rounded-full ${
-															trend.change > 0
-																? 'bg-green-100 text-green-700'
-																: trend.change < 0
-																? 'bg-red-100 text-red-700'
-																: 'bg-slate-100 text-slate-700'
-														}`}
-													>
-														{trend.change > 0 ? '+' : ''}
-														{trend.change.toFixed(1)}
-													</span>
-												)}
-											</div>
-											<div className='flex items-center gap-3 sm:gap-4'>
-												{trend.preRating && (
-													<div className='flex items-center gap-2'>
-														<span className='text-xs text-slate-500'>
-															Before:
-														</span>
-														<div
-															className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full ${getMoodColor(
-																trend.preRating
-															)} flex items-center justify-center text-white font-bold text-sm sm:text-base shadow-md`}
-														>
-															{trend.preRating}
-														</div>
-													</div>
-												)}
-												{trend.preRating && trend.postRating && (
-													<span className='text-slate-300 text-lg'>→</span>
-												)}
-												{trend.postRating && (
-													<div className='flex items-center gap-2'>
-														<span className='text-xs text-slate-500'>
-															After:
-														</span>
-														<div
-															className={`w-10 h-10 sm:w-12 sm:h-12 rounded-full ${getMoodColor(
-																trend.postRating
-															)} flex items-center justify-center text-white font-bold text-sm sm:text-base shadow-md`}
-														>
-															{trend.postRating}
-														</div>
-													</div>
-												)}
-											</div>
-										</div>
-									))}
+								{isMoodTrendsOpen ? (
+									<ChevronUp size={20} className='text-slate-600' />
+								) : (
+									<ChevronDown size={20} className='text-slate-600' />
+								)}
+							</button>
+							{isMoodTrendsOpen && (
+								<div className='flex-1 p-4 sm:p-6'>
+									<MoodTrendsChart trends={moodTrends} />
 								</div>
-							</div>
+							)}
 						</div>
 					)}
 

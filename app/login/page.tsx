@@ -1,6 +1,3 @@
-// frontend/app/login/page.tsx
-// Login page with Gmail OAuth
-
 'use client';
 
 import { useAuth } from '@/contexts/AuthContext';
@@ -35,15 +32,19 @@ export default function LoginPage() {
 
 	return (
 		<div className='min-h-screen flex items-center justify-center therapy-background'>
-			<div className='w-full max-w-md p-8 bg-white/10 backdrop-blur-md rounded-lg shadow-xl border border-white/20'>
+			<div className='w-full max-w-md p-8 bg-gradient-to-br from-blue-50/80 via-purple-50/80 to-pink-50/80 backdrop-blur-md rounded-lg shadow-xl border border-blue-100/50'>
 				<div className='text-center mb-8'>
-					<h1 className='text-3xl font-bold text-white mb-2'>LiveTherapy</h1>
-					<p className='text-white/80'>Get support when you need it most</p>
+					<h1 className='text-3xl sm:text-4xl font-bold text-slate-800 mb-2'>
+						LiveTherapy
+					</h1>
+					<p className='text-slate-600 text-sm sm:text-base'>
+						Get support when you need it most
+					</p>
 				</div>
 
 				<button
 					onClick={handleGoogleSignIn}
-					className='cursor-pointer w-full flex items-center justify-center gap-3 px-6 py-3 bg-white text-gray-900 rounded-lg font-medium hover:bg-gray-100 transition-colors shadow-lg'
+					className='cursor-pointer w-full flex items-center justify-center gap-3 px-6 py-3 bg-white text-gray-900 rounded-lg font-medium hover:bg-gray-50 transition-colors shadow-md hover:shadow-lg'
 				>
 					<svg
 						className='w-5 h-5'

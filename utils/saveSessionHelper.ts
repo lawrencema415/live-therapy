@@ -26,11 +26,10 @@ export async function saveSessionTranscripts({
 		return;
 	}
 
-	// Use a consistent timestamp (start of current day) to ensure we get the same session
+	// Use actual timestamp (rounded to minute) to allow multiple sessions per day
 	// This is used as a key for the ongoingSaves map BEFORE getting the session ID
-	const todayStart = new Date();
-	todayStart.setHours(0, 0, 0, 0);
-	const sessionKey = `session-${todayStart.getTime()}`;
+	const now = Date.now();
+	const sessionKey = `session-${Math.floor(now / 60000)}`;
 
 	// Check if there's already a save in progress for this day's session
 	// This MUST happen BEFORE getOrCreateSession to prevent race conditions
@@ -46,8 +45,8 @@ export async function saveSessionTranscripts({
 	// Create the save promise IMMEDIATELY and store it BEFORE doing any async work
 	// This prevents other concurrent calls from also starting a save
 	const savePromise = (async (): Promise<void> => {
-		// Get or create session INSIDE the promise to ensure we use the same session
-		const sessionId = await getOrCreateSession(todayStart.getTime());
+		// Get or create session INSIDE the promise - use actual timestamp for new session
+		const sessionId = await getOrCreateSession(now);
 	
 		if (!sessionId) {
 			console.error('[SessionSave] Failed to get or create session');
