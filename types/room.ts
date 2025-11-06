@@ -2,7 +2,7 @@
 
 export interface TranscriptMessage {
 	id: string;
-	speaker: string;
+	speaker: string; // 'user' | 'agent' | 'system'
 	text: string;
 	isFinal: boolean;
 	timestamp: number;

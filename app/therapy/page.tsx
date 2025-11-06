@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { Mic, MicOff } from 'lucide-react';
 import { useRoomConnection } from '@/hooks/useRoomConnection';
 import { useTranscripts } from '@/hooks/useTranscripts';
+import { useCrisisDetection } from '@/hooks/useCrisisDetection';
 import { JoinScreen } from '@/components/room/JoinScreen';
 import { RoomHeader } from '@/components/room/RoomHeader';
 import { TranscriptList } from '@/components/room/TranscriptList';
@@ -28,6 +29,14 @@ export default function TherapyPage() {
 	// Transcript management (initialize first)
 	const transcriptHook = useTranscripts();
 
+	// Crisis detection
+	const { checkForCrisis, reset: resetCrisisDetection } = useCrisisDetection({
+		onCrisisDetected: (systemMessage) => {
+			// Add system message to transcripts
+			transcriptHook.addTranscript(systemMessage);
+		},
+	});
+
 	// Get room reference for transcript storage
 	const {
 		isConnected,
@@ -45,6 +54,8 @@ export default function TherapyPage() {
 		},
 		onTranscriptReceived: (message) => {
 			transcriptHook.addTranscript(message);
+			// Check for crisis keywords in user messages
+			checkForCrisis(message);
 		},
 		onSummariesReceived: (summaries: SessionSummary[]) => {
 			// Save summaries when received from agent
@@ -62,6 +73,10 @@ export default function TherapyPage() {
 	// Update transcript hook when room changes
 	useEffect(() => {
 		transcriptHook.setRoom(getRoom());
+		// Reset crisis detection when connecting to a new session
+		if (isConnected) {
+			resetCrisisDetection();
+		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [isConnected]);
 
@@ -77,8 +92,9 @@ export default function TherapyPage() {
 				const currentTranscripts = transcriptHook.transcripts;
 				if (currentTranscripts.length > 0) {
 					// Sanitize: include final messages AND agent messages (even if not final, they're usually complete)
+					// Exclude system messages (crisis resources) from saved transcripts
 					const sanitized = currentTranscripts
-						.filter((t) => t.isFinal || t.speaker === 'agent') // Include agent messages even if not final
+						.filter((t) => t.speaker !== 'system' && (t.isFinal || t.speaker === 'agent')) // Exclude system messages
 						.map((t) => ({
 							role: t.speaker === 'agent' ? 'assistant' : t.speaker,
 							text: t.text,
@@ -387,8 +403,9 @@ export default function TherapyPage() {
 		const currentTranscripts = transcriptHook.transcripts;
 		if (userName && currentTranscripts.length > 0) {
 			// Sanitize: include final messages AND agent messages (even if not final, they're usually complete)
+			// Exclude system messages (crisis resources) from saved transcripts
 			const sanitized = currentTranscripts
-				.filter((t) => t.isFinal || t.speaker === 'agent') // Include agent messages even if not final
+				.filter((t) => t.speaker !== 'system' && (t.isFinal || t.speaker === 'agent')) // Exclude system messages
 				.map((t) => ({
 					role: t.speaker === 'agent' ? 'assistant' : t.speaker,
 					text: t.text,
