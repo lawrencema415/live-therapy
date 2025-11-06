@@ -1,7 +1,8 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { Mic, MicOff } from 'lucide-react';
+import type { Room } from 'livekit-client';
 import { useRoomConnection } from '@/hooks/useRoomConnection';
 import { useTranscripts } from '@/hooks/useTranscripts';
 import { useCrisisDetection } from '@/hooks/useCrisisDetection';
@@ -16,13 +17,30 @@ import {
 	type SessionSummary,
 } from '@/utils/userSessionStorage';
 import { saveSessionTranscripts } from '@/utils/saveSessionHelper';
+import {
+	isClient,
+	safeLocalStorageGet,
+	safeLocalStorageSet,
+	safeLocalStorageRemove,
+} from '@/utils/clientUtils';
+import { useClientEffect } from '@/hooks/useClientEffect';
 
 const STORAGE_KEY_NAME = 'therapy_remembered_name';
 const STORAGE_KEY_REMEMBER = 'therapy_remember_me';
 
 export default function TherapyPage() {
-	const [userName, setUserName] = useState('');
-	const [rememberMe, setRememberMe] = useState(false);
+	// Use lazy initialization for localStorage values
+	// Check for window to ensure localStorage is available (SSR safety)
+	const [userName, setUserName] = useState(() => {
+		if (!isClient()) return '';
+		const rememberedName = safeLocalStorageGet(STORAGE_KEY_NAME);
+		const shouldRemember = safeLocalStorageGet(STORAGE_KEY_REMEMBER) === 'true';
+		return shouldRemember && rememberedName ? rememberedName : '';
+	});
+	const [rememberMe, setRememberMe] = useState(() => {
+		if (!isClient()) return false;
+		return safeLocalStorageGet(STORAGE_KEY_REMEMBER) === 'true';
+	});
 	const [hasPreviousSession, setHasPreviousSession] = useState(false);
 	const [isLoading, setIsLoading] = useState(true);
 	const [isSaving, setIsSaving] = useState(false);
@@ -30,13 +48,73 @@ export default function TherapyPage() {
 	// Transcript management (initialize first)
 	const transcriptHook = useTranscripts();
 
-	// Crisis detection
-	const { checkForCrisis, reset: resetCrisisDetection } = useCrisisDetection({
-		onCrisisDetected: (systemMessage) => {
-			// Add system message to transcripts
-			transcriptHook.addTranscript(systemMessage);
+	// Store transcript hook methods in refs to avoid dependency issues
+	const transcriptHookRef = useRef(transcriptHook);
+	useEffect(() => {
+		transcriptHookRef.current = transcriptHook;
+	}, [transcriptHook]);
+
+	// Crisis detection callback - memoized to avoid recreating
+	// Using ref to avoid dependency on transcriptHook
+	const handleCrisisDetected = useCallback(
+		(
+			systemMessage: Parameters<
+				ReturnType<typeof useTranscripts>['addTranscript']
+			>[0]
+		) => {
+			transcriptHookRef.current.addTranscript(systemMessage);
 		},
+		[]
+	);
+
+	const { checkForCrisis, reset: resetCrisisDetection } = useCrisisDetection({
+		onCrisisDetected: handleCrisisDetected,
 	});
+
+	// Store room connection methods in refs
+	const roomConnectionRef = useRef<{
+		getRoom: () => Room | null;
+		disconnect: () => Promise<void>;
+	} | null>(null);
+
+	// Callbacks for room connection - memoized to avoid recreating
+	// Using refs to avoid dependency on transcriptHook
+	const handleTranscriptsUpdate = useCallback(
+		(
+			transcripts: Parameters<
+				ReturnType<typeof useTranscripts>['setTranscriptsFromStorage']
+			>[0]
+		) => {
+			transcriptHookRef.current.setTranscriptsFromStorage(transcripts);
+		},
+		[]
+	);
+
+	const handleTranscriptReceived = useCallback(
+		(
+			message: Parameters<ReturnType<typeof useTranscripts>['addTranscript']>[0]
+		) => {
+			transcriptHookRef.current.addTranscript(message);
+			// Check for crisis keywords in user messages
+			checkForCrisis(message);
+		},
+		[checkForCrisis]
+	);
+
+	const handleSummariesReceived = useCallback(
+		(summaries: SessionSummary[]) => {
+			// Save summaries when received from agent
+			if (userName && summaries.length > 0) {
+				// Keep only last 10 summaries
+				const summariesToKeep = summaries.slice(-10);
+				saveSessionSummaries(userName, summariesToKeep);
+				console.log(
+					`[TherapyPage] Saved ${summariesToKeep.length} summaries from agent`
+				);
+			}
+		},
+		[userName]
+	);
 
 	// Get room reference for transcript storage
 	const {
@@ -50,54 +128,45 @@ export default function TherapyPage() {
 		toggleMute,
 		getRoom,
 	} = useRoomConnection({
-		onTranscriptsUpdate: (transcripts) => {
-			transcriptHook.setTranscriptsFromStorage(transcripts);
-		},
-		onTranscriptReceived: (message) => {
-			transcriptHook.addTranscript(message);
-			// Check for crisis keywords in user messages
-			checkForCrisis(message);
-		},
-		onSummariesReceived: (summaries: SessionSummary[]) => {
-			// Save summaries when received from agent
-			if (userName && summaries.length > 0) {
-				// Keep only last 10 summaries
-				const summariesToKeep = summaries.slice(-10);
-				saveSessionSummaries(userName, summariesToKeep);
-				console.log(
-					`[TherapyPage] Saved ${summariesToKeep.length} summaries from agent`
-				);
-			}
-		},
+		onTranscriptsUpdate: handleTranscriptsUpdate,
+		onTranscriptReceived: handleTranscriptReceived,
+		onSummariesReceived: handleSummariesReceived,
 	});
+
+	// Store room connection methods in ref
+	useEffect(() => {
+		roomConnectionRef.current = { getRoom, disconnect };
+	}, [getRoom, disconnect]);
 
 	// Update transcript hook when room changes and reset crisis detection
 	useEffect(() => {
 		if (isConnected) {
-			transcriptHook.setRoom(getRoom());
+			const room = roomConnectionRef.current?.getRoom();
+			if (room) {
+				transcriptHookRef.current.setRoom(room);
+			}
 			resetCrisisDetection();
 		} else {
-			transcriptHook.setRoom(null);
+			transcriptHookRef.current.setRoom(null);
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [isConnected]);
+	}, [isConnected, resetCrisisDetection]);
 
 	// Save transcripts when session ends (only for automatic disconnects, not user-initiated)
 	useEffect(() => {
 		if (!isConnected && userName && !isSaving) {
 			// Finalize all buffered messages first
-			transcriptHook.finalizeAllBuffers();
+			transcriptHookRef.current.finalizeAllBuffers();
 
 			// Wait a bit to ensure all buffered messages are finalized
 			const saveTimeout = setTimeout(() => {
-				const currentTranscripts = transcriptHook.transcripts;
+				const currentTranscripts = transcriptHookRef.current.transcripts;
 				if (currentTranscripts.length > 0) {
 					saveSessionTranscripts({
 						userName,
 						transcripts: currentTranscripts,
 						onComplete: () => {
 							setHasPreviousSession(true);
-							transcriptHook.clearTranscripts();
+							transcriptHookRef.current.clearTranscripts();
 						},
 					});
 				} else {
@@ -107,36 +176,32 @@ export default function TherapyPage() {
 
 			return () => clearTimeout(saveTimeout);
 		}
-		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [isConnected, userName, isSaving]);
+
+	// Store userName in ref for cleanup
+	const userNameRef = useRef(userName);
+	useEffect(() => {
+		userNameRef.current = userName;
+	}, [userName]);
 
 	// Cleanup on unmount - save transcripts and disconnect
 	useEffect(() => {
 		return () => {
-			transcriptHook.finalizeAllBuffers();
-			const currentTranscripts = transcriptHook.transcripts;
-			if (userName && currentTranscripts.length > 0) {
+			transcriptHookRef.current.finalizeAllBuffers();
+			const currentTranscripts = transcriptHookRef.current.transcripts;
+			const currentUserName = userNameRef.current;
+			if (currentUserName && currentTranscripts.length > 0) {
 				saveSessionTranscripts({
-					userName,
+					userName: currentUserName,
 					transcripts: currentTranscripts,
 				});
 			}
-			disconnect().catch(console.error);
+			roomConnectionRef.current?.disconnect().catch(console.error);
 		};
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [userName]);
+	}, []);
 
-	// Load remembered name from localStorage on mount
+	// Loading state - small delay for smooth transition
 	useEffect(() => {
-		const rememberedName = localStorage.getItem(STORAGE_KEY_NAME);
-		const shouldRemember =
-			localStorage.getItem(STORAGE_KEY_REMEMBER) === 'true';
-
-		if (shouldRemember && rememberedName) {
-			setUserName(rememberedName);
-			setRememberMe(true);
-		}
-
 		const loadingTimeout = setTimeout(() => {
 			setIsLoading(false);
 		}, 300);
@@ -145,43 +210,62 @@ export default function TherapyPage() {
 	}, []);
 
 	// Save name to localStorage when userName changes and rememberMe is true
-	useEffect(() => {
+	useClientEffect(() => {
 		if (rememberMe && userName.trim()) {
-			localStorage.setItem(STORAGE_KEY_NAME, userName.trim());
-			localStorage.setItem(STORAGE_KEY_REMEMBER, 'true');
+			safeLocalStorageSet(STORAGE_KEY_NAME, userName.trim());
+			safeLocalStorageSet(STORAGE_KEY_REMEMBER, 'true');
 		} else if (!rememberMe) {
-			localStorage.removeItem(STORAGE_KEY_NAME);
-			localStorage.removeItem(STORAGE_KEY_REMEMBER);
+			safeLocalStorageRemove(STORAGE_KEY_NAME);
+			safeLocalStorageRemove(STORAGE_KEY_REMEMBER);
 		}
 	}, [userName, rememberMe]);
 
 	// Check for previous session when userName changes or after disconnect
-	useEffect(() => {
-		if (!userName.trim()) {
-			setHasPreviousSession(false);
-			return;
+	// Derive value synchronously when connected, use async check when disconnected
+	const previousSessionValue = useMemo(() => {
+		if (!isClient() || !userName.trim()) {
+			return false;
 		}
+		const session = loadUserSession(userName.trim());
+		return (
+			session !== null &&
+			(session.transcripts.length > 0 ||
+				session.summaries.length > 0 ||
+				(session.moodData && session.moodData.length > 0))
+		);
+	}, [userName]);
 
-		const checkSession = () => {
-			const session = loadUserSession(userName.trim());
-			const hasSession =
-				session !== null &&
-				(session.transcripts.length > 0 ||
-					session.summaries.length > 0 ||
-					(session.moodData && session.moodData.length > 0));
-			setHasPreviousSession(hasSession);
-		};
+	// Track previous value to avoid unnecessary updates
+	const previousValueRef = useRef(previousSessionValue);
 
-		// If disconnected, wait a bit for localStorage to update
-		if (!isConnected) {
-			const checkTimer = setTimeout(checkSession, 100);
+	// Update state based on derived value when connected (only if changed)
+	useEffect(() => {
+		if (isConnected && previousValueRef.current !== previousSessionValue) {
+			previousValueRef.current = previousSessionValue;
+			// Use requestAnimationFrame to defer setState
+			requestAnimationFrame(() => {
+				setHasPreviousSession(previousSessionValue);
+			});
+		}
+	}, [isConnected, previousSessionValue]);
+
+	// Async check when disconnected (localStorage may not be updated yet)
+	useClientEffect(() => {
+		if (!isConnected && userName.trim()) {
+			const checkTimer = setTimeout(() => {
+				const session = loadUserSession(userName.trim());
+				const hasSession =
+					session !== null &&
+					(session.transcripts.length > 0 ||
+						session.summaries.length > 0 ||
+						(session.moodData && session.moodData.length > 0));
+				setHasPreviousSession(hasSession);
+			}, 100);
 			return () => clearTimeout(checkTimer);
-		} else {
-			checkSession();
 		}
 	}, [userName, isConnected]);
 
-	const handleJoin = async () => {
+	const handleJoin = useCallback(async () => {
 		if (!userName.trim()) return;
 
 		try {
@@ -226,28 +310,29 @@ export default function TherapyPage() {
 			// If there are previous transcripts, load them into the UI
 			if (previousTranscripts.length > 0) {
 				const messages = convertStoredToMessages(previousTranscripts);
-				transcriptHook.setTranscriptsFromStorage(messages);
+				transcriptHookRef.current.setTranscriptsFromStorage(messages);
 			}
 		} catch (error) {
 			console.error('Failed to join session:', error);
 		}
-	};
+	}, [userName, connectToRoom]);
 
-	const handleEndCall = async () => {
+	const handleEndCall = useCallback(async () => {
 		// Set saving state to disable button and show "Saving..." text
 		setIsSaving(true);
 
 		// Finalize all buffered messages first
-		transcriptHook.finalizeAllBuffers();
+		transcriptHookRef.current.finalizeAllBuffers();
 
 		// Wait a bit to ensure all buffered messages are finalized before saving
 		await new Promise((resolve) => setTimeout(resolve, 2000));
 
 		// Save transcripts using helper function
-		const currentTranscripts = transcriptHook.transcripts;
-		if (userName && currentTranscripts.length > 0) {
+		const currentTranscripts = transcriptHookRef.current.transcripts;
+		const currentUserName = userNameRef.current;
+		if (currentUserName && currentTranscripts.length > 0) {
 			await saveSessionTranscripts({
-				userName,
+				userName: currentUserName,
 				transcripts: currentTranscripts,
 				onComplete: () => {
 					setHasPreviousSession(true);
@@ -257,9 +342,9 @@ export default function TherapyPage() {
 		} else {
 			setIsSaving(false);
 		}
-		transcriptHook.clearTranscripts();
-		await disconnect();
-	};
+		transcriptHookRef.current.clearTranscripts();
+		await roomConnectionRef.current?.disconnect();
+	}, []);
 
 	// Loading overlay
 	if (isLoading) {
