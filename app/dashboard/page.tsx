@@ -7,35 +7,29 @@ import {
 	loadSessionSummaries,
 	loadMoodData,
 } from '@/utils/userSessionStorage';
-import { useRouter } from 'next/navigation';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function DashboardPage() {
+	const { user } = useAuth();
 	const [userName, setUserName] = useState('');
 	const [summaries, setSummaries] = useState<any[]>([]);
 	const [moodData, setMoodData] = useState<any[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
-	const router = useRouter();
 
 	useEffect(() => {
-		// Get userName from localStorage or prompt
-		const rememberedName = localStorage.getItem('therapy_remembered_name');
-		const shouldRemember =
-			localStorage.getItem('therapy_remember_me') === 'true';
-
-		if (shouldRemember && rememberedName) {
-			setUserName(rememberedName);
-			loadDashboardData(rememberedName);
-		} else {
-			// Prompt for name or redirect
-			const name = prompt('Please enter your name to view your dashboard:');
-			if (name && name.trim()) {
-				setUserName(name.trim());
-				loadDashboardData(name.trim());
-			} else {
-				router.push('/therapy');
-			}
+		if (user) {
+			// Get first name from Google account metadata
+			const name =
+				user.user_metadata?.given_name ||
+				user.user_metadata?.full_name?.split(' ')[0] ||
+				user.user_metadata?.name?.split(' ')[0] ||
+				user.email?.split('@')[0] ||
+				user.id;
+			setUserName(name);
+			loadDashboardData(name);
 		}
-	}, [router]);
+	}, [user]);
 
 	const loadDashboardData = (name: string) => {
 		try {
@@ -63,16 +57,16 @@ export default function DashboardPage() {
 		);
 	}
 
-	if (!userName) {
-		return null;
-	}
-
 	return (
-		<ProgressDashboard
-			userName={userName}
-			summaries={summaries}
-			moodData={moodData}
-		/>
+		<ProtectedRoute>
+			{userName && (
+				<ProgressDashboard
+					userName={userName}
+					summaries={summaries}
+					moodData={moodData}
+				/>
+			)}
+		</ProtectedRoute>
 	);
 }
 

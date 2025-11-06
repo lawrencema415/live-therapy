@@ -107,7 +107,7 @@ export function ProgressDashboard({
 				<div className='flex items-center gap-4 mb-2'></div>
 				<div className='flex flex-row space-x-1'>
 					<h1 className='text-2xl sm:text-3xl font-bold text-slate-800'>
-						Progress Dashboard
+						Wellness Dashboard
 					</h1>
 					<button
 						onClick={() => router.back()}

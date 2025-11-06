@@ -17,30 +17,42 @@ import {
 	type SessionSummary,
 } from '@/utils/userSessionStorage';
 import { saveSessionTranscripts } from '@/utils/saveSessionHelper';
-import {
-	isClient,
-	safeLocalStorageGet,
-	safeLocalStorageSet,
-	safeLocalStorageRemove,
-} from '@/utils/clientUtils';
+import { isClient } from '@/utils/clientUtils';
 import { useClientEffect } from '@/hooks/useClientEffect';
+import { ProtectedRoute } from '@/components/auth/ProtectedRoute';
+import { useAuth } from '@/contexts/AuthContext';
+import { useRouter } from 'next/navigation';
 
-const STORAGE_KEY_NAME = 'therapy_remembered_name';
-const STORAGE_KEY_REMEMBER = 'therapy_remember_me';
-
-export default function TherapyPage() {
-	// Use lazy initialization for localStorage values
-	// Check for window to ensure localStorage is available (SSR safety)
+function TherapyPageContent() {
+	const { user, signOut } = useAuth();
+	const router = useRouter();
+	
+	// Get userName from authenticated user's Google account (first name only)
+	const getUserName = useCallback(() => {
+		if (!user) return '';
+		// Use first name (given_name) from Google account metadata
+		// Google OAuth provides: given_name, full_name, name
+		return (
+			user.user_metadata?.given_name ||
+			user.user_metadata?.full_name?.split(' ')[0] ||
+			user.user_metadata?.name?.split(' ')[0] ||
+			user.email?.split('@')[0] ||
+			user.id
+		);
+	}, [user]);
+	
 	const [userName, setUserName] = useState(() => {
 		if (!isClient()) return '';
-		const rememberedName = safeLocalStorageGet(STORAGE_KEY_NAME);
-		const shouldRemember = safeLocalStorageGet(STORAGE_KEY_REMEMBER) === 'true';
-		return shouldRemember && rememberedName ? rememberedName : '';
+		return getUserName();
 	});
-	const [rememberMe, setRememberMe] = useState(() => {
-		if (!isClient()) return false;
-		return safeLocalStorageGet(STORAGE_KEY_REMEMBER) === 'true';
-	});
+	
+	// Update userName when user is available
+	useEffect(() => {
+		if (user) {
+			const name = getUserName();
+			setUserName(name);
+		}
+	}, [user, getUserName]);
 	const [hasPreviousSession, setHasPreviousSession] = useState(false);
 	const [isLoading, setIsLoading] = useState(true);
 	const [isSaving, setIsSaving] = useState(false);
@@ -209,16 +221,6 @@ export default function TherapyPage() {
 		return () => clearTimeout(loadingTimeout);
 	}, []);
 
-	// Save name to localStorage when userName changes and rememberMe is true
-	useClientEffect(() => {
-		if (rememberMe && userName.trim()) {
-			safeLocalStorageSet(STORAGE_KEY_NAME, userName.trim());
-			safeLocalStorageSet(STORAGE_KEY_REMEMBER, 'true');
-		} else if (!rememberMe) {
-			safeLocalStorageRemove(STORAGE_KEY_NAME);
-			safeLocalStorageRemove(STORAGE_KEY_REMEMBER);
-		}
-	}, [userName, rememberMe]);
 
 	// Check for previous session when userName changes or after disconnect
 	// Derive value synchronously when connected, use async check when disconnected
@@ -346,6 +348,15 @@ export default function TherapyPage() {
 		await roomConnectionRef.current?.disconnect();
 	}, []);
 
+	const handleLogout = useCallback(async () => {
+		try {
+			await signOut();
+			router.push('/');
+		} catch (error) {
+			console.error('Failed to sign out:', error);
+		}
+	}, [signOut, router]);
+
 	// Loading overlay
 	if (isLoading) {
 		return (
@@ -372,8 +383,7 @@ export default function TherapyPage() {
 				isConnecting={isConnecting}
 				isWaitingForAgent={isWaitingForAgent}
 				hasPreviousSession={hasPreviousSession}
-				rememberMe={rememberMe}
-				onRememberMeChange={setRememberMe}
+				onLogout={handleLogout}
 			/>
 		);
 	}
@@ -427,5 +437,13 @@ export default function TherapyPage() {
 				</div>
 			</div>
 		</div>
+	);
+}
+
+export default function TherapyPage() {
+	return (
+		<ProtectedRoute>
+			<TherapyPageContent />
+		</ProtectedRoute>
 	);
 }

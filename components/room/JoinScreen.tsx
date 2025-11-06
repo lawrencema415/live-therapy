@@ -7,8 +7,7 @@ interface JoinScreenProps {
 	isConnecting: boolean;
 	isWaitingForAgent?: boolean;
 	hasPreviousSession?: boolean;
-	rememberMe: boolean;
-	onRememberMeChange: (remember: boolean) => void;
+	onLogout?: () => void;
 }
 
 export function JoinScreen({
@@ -18,8 +17,7 @@ export function JoinScreen({
 	isConnecting,
 	isWaitingForAgent = false,
 	hasPreviousSession = false,
-	rememberMe,
-	onRememberMeChange,
+	onLogout,
 }: JoinScreenProps) {
 	return (
 		<div className='min-h-screen flex items-center justify-center p-4 sm:p-6'>
@@ -60,23 +58,6 @@ export function JoinScreen({
 								Welcome back! Your previous conversations will be remembered.
 							</p>
 						)}
-					</div>
-
-					<div className='flex items-center'>
-						<input
-							id='rememberMe'
-							type='checkbox'
-							checked={rememberMe}
-							onChange={(e) => onRememberMeChange(e.target.checked)}
-							className='h-4 w-4 text-blue-600 focus:ring-blue-500 border-slate-300 rounded cursor-pointer'
-							disabled={isConnecting}
-						/>
-						<label
-							htmlFor='rememberMe'
-							className='ml-2 block text-sm text-slate-700 cursor-pointer select-none'
-						>
-							Remember me
-						</label>
 					</div>
 
 					<button
@@ -121,16 +102,23 @@ export function JoinScreen({
 						</p>
 					)}
 
-					{hasPreviousSession && (
-						<div className='pt-5 border-t border-slate-200'>
-							<Link
-								href='/dashboard'
-								className='block text-center text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors'
-							>
-								View Your Progress Dashboard →
-							</Link>
-						</div>
+					{onLogout && (
+						<button
+							onClick={onLogout}
+							disabled={isConnecting}
+							className='cursor-pointer w-full text-slate-500 hover:text-slate-700 hover:bg-slate-50 font-medium py-2.5 px-4 rounded-xl transition-all disabled:opacity-50 disabled:cursor-not-allowed border border-slate-200 hover:border-slate-300'
+						>
+							Logout
+						</button>
 					)}
+					<div className='pt-5 border-t border-slate-200'>
+						<Link
+							href='/dashboard'
+							className='block text-center text-sm text-blue-600 hover:text-blue-700 font-medium transition-colors'
+						>
+							Wellness Dashboard →
+						</Link>
+					</div>
 				</div>
 			</div>
 		</div>

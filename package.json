@@ -11,6 +11,8 @@
   "dependencies": {
     "@livekit/agents-plugin-openai": "^1.0.15",
     "@livekit/react-components": "^1.1.0",
+    "@supabase/ssr": "^0.7.0",
+    "@supabase/supabase-js": "^2.80.0",
     "@types/lodash": "^4.17.20",
     "livekit-client": "^2.15.14",
     "livekit-server-sdk": "^2.5.3",
