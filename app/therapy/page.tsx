@@ -15,6 +15,7 @@ import {
 	saveSessionSummaries,
 	type SessionSummary,
 } from '@/utils/userSessionStorage';
+import { saveSessionTranscripts } from '@/utils/saveSessionHelper';
 
 const STORAGE_KEY_NAME = 'therapy_remembered_name';
 const STORAGE_KEY_REMEMBER = 'therapy_remember_me';
@@ -70,12 +71,13 @@ export default function TherapyPage() {
 		},
 	});
 
-	// Update transcript hook when room changes
+	// Update transcript hook when room changes and reset crisis detection
 	useEffect(() => {
-		transcriptHook.setRoom(getRoom());
-		// Reset crisis detection when connecting to a new session
 		if (isConnected) {
+			transcriptHook.setRoom(getRoom());
 			resetCrisisDetection();
+		} else {
+			transcriptHook.setRoom(null);
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [isConnected]);
@@ -87,193 +89,37 @@ export default function TherapyPage() {
 			transcriptHook.finalizeAllBuffers();
 
 			// Wait a bit to ensure all buffered messages are finalized
-			setTimeout(() => {
-				// Simply use transcripts from state - sanitize and save
+			const saveTimeout = setTimeout(() => {
 				const currentTranscripts = transcriptHook.transcripts;
 				if (currentTranscripts.length > 0) {
-					// Sanitize: include final messages AND agent messages (even if not final, they're usually complete)
-					// Exclude system messages (crisis resources) from saved transcripts
-					const sanitized = currentTranscripts
-						.filter((t) => t.speaker !== 'system' && (t.isFinal || t.speaker === 'agent')) // Exclude system messages
-						.map((t) => ({
-							role: t.speaker === 'agent' ? 'assistant' : t.speaker,
-							text: t.text,
-							timestamp: t.timestamp,
-						}));
-
-					console.log(
-						`[TherapyPage] Saving ${
-							sanitized.length
-						} transcripts on disconnect (Agent: ${
-							sanitized.filter((t) => t.role === 'assistant').length
-						}, User: ${sanitized.filter((t) => t.role === 'user').length})`
-					);
-
-					// Load existing session data
-					const existingSession = loadUserSession(userName);
-					const existingSummaries = existingSession?.summaries || [];
-
-					// Save to localStorage
-					const sessionData = {
-						userName: userName.trim(),
-						transcripts: sanitized,
-						summaries: existingSummaries,
-						lastSessionDate: Date.now(),
-					};
-
-					const key = `therapy_user_${userName.trim().toLowerCase()}`;
-					localStorage.setItem(key, JSON.stringify(sessionData));
-
-					// Update hasPreviousSession since we just saved session data
-					setHasPreviousSession(true);
-
-					// Note: Don't set isSaving here - this useEffect is for automatic disconnects only
-					// User-initiated saves are handled in handleEndCall
-
-					// Generate and save summary via API (async, don't block)
-					(async () => {
-						try {
-							const summaryResponse = await fetch('/api/summarize', {
-								method: 'POST',
-								headers: {
-									'Content-Type': 'application/json',
-								},
-								body: JSON.stringify({
-									userName: userName.trim(),
-									transcripts: sanitized,
-								}),
-							});
-
-							if (summaryResponse.ok) {
-								const data = await summaryResponse.json();
-								const summary = data.summary;
-								if (summary) {
-									// Add new summary to existing summaries
-									const updatedSummaries = [
-										...existingSummaries,
-										summary,
-									].slice(-10); // Keep last 10
-
-									// Update session data with new summaries
-									const updatedSessionData = {
-										...sessionData,
-										summaries: updatedSummaries,
-									};
-
-									localStorage.setItem(key, JSON.stringify(updatedSessionData));
-									console.log(
-										`[TherapyPage] ✓ Generated and saved summary for ${userName}`
-									);
-								}
-							} else {
-								const errorText = await summaryResponse.text();
-								console.warn(
-									'[TherapyPage] Failed to generate summary:',
-									errorText
-								);
-							}
-						} catch (error) {
-							console.error('[TherapyPage] Error generating summary:', error);
-						}
-					})();
-
-					transcriptHook.clearTranscripts();
+					saveSessionTranscripts({
+						userName,
+						transcripts: currentTranscripts,
+						onComplete: () => {
+							setHasPreviousSession(true);
+							transcriptHook.clearTranscripts();
+						},
+					});
 				} else {
 					console.log(`[TherapyPage] No transcripts to save on disconnect`);
 				}
-			}, 2000); // Wait 2 seconds to allow merge buffer to finalize
+			}, 2000);
+
+			return () => clearTimeout(saveTimeout);
 		}
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, [isConnected, userName, isSaving]);
 
-	// Cleanup on unmount - save transcripts properly
+	// Cleanup on unmount - save transcripts and disconnect
 	useEffect(() => {
 		return () => {
-			// Finalize buffers first
 			transcriptHook.finalizeAllBuffers();
-
-			// Simply use transcripts from state - sanitize and save
 			const currentTranscripts = transcriptHook.transcripts;
-
 			if (userName && currentTranscripts.length > 0) {
-				// Sanitize: include final messages AND agent messages (even if not final, they're usually complete)
-				const sanitized = currentTranscripts
-					.filter((t) => t.isFinal || t.speaker === 'agent') // Include agent messages even if not final
-					.map((t) => ({
-						role: t.speaker === 'agent' ? 'assistant' : t.speaker,
-						text: t.text,
-						timestamp: t.timestamp,
-					}));
-
-				// Log what we're saving
-				const agentCount = sanitized.filter(
-					(t) => t.role === 'assistant'
-				).length;
-				const userCount = sanitized.filter((t) => t.role === 'user').length;
-				console.log(
-					`[TherapyPage] Unmount - Saving ${sanitized.length} transcripts (Agent: ${agentCount}, User: ${userCount})`
-				);
-
-				// Load existing session data
-				const existingSession = loadUserSession(userName);
-				const existingSummaries = existingSession?.summaries || [];
-
-				// Save transcripts to localStorage first
-				const sessionData = {
-					userName: userName.trim(),
-					transcripts: sanitized,
-					summaries: existingSummaries,
-					lastSessionDate: Date.now(),
-				};
-
-				const key = `therapy_user_${userName.trim().toLowerCase()}`;
-				localStorage.setItem(key, JSON.stringify(sessionData));
-
-				// Generate and save summary via API (async, don't block unmount)
-				(async () => {
-					try {
-						const summaryResponse = await fetch('/api/summarize', {
-							method: 'POST',
-							headers: {
-								'Content-Type': 'application/json',
-							},
-							body: JSON.stringify({
-								userName: userName.trim(),
-								transcripts: sanitized,
-							}),
-						});
-
-						if (summaryResponse.ok) {
-							const data = await summaryResponse.json();
-							const summary = data.summary;
-							if (summary) {
-								// Add new summary to existing summaries
-								const updatedSummaries = [...existingSummaries, summary].slice(
-									-10
-								); // Keep last 10
-
-								// Update session data with new summaries
-								const updatedSessionData = {
-									...sessionData,
-									summaries: updatedSummaries,
-								};
-
-								localStorage.setItem(key, JSON.stringify(updatedSessionData));
-								console.log(
-									`[TherapyPage] ✓ Generated and saved summary for ${userName}`
-								);
-							}
-						} else {
-							const errorText = await summaryResponse.text();
-							console.warn(
-								'[TherapyPage] Failed to generate summary:',
-								errorText
-							);
-						}
-					} catch (error) {
-						console.error('[TherapyPage] Error generating summary:', error);
-					}
-				})();
+				saveSessionTranscripts({
+					userName,
+					transcripts: currentTranscripts,
+				});
 			}
 			disconnect().catch(console.error);
 		};
@@ -291,10 +137,11 @@ export default function TherapyPage() {
 			setRememberMe(true);
 		}
 
-		// Small delay for smooth transition
-		setTimeout(() => {
+		const loadingTimeout = setTimeout(() => {
 			setIsLoading(false);
 		}, 300);
+
+		return () => clearTimeout(loadingTimeout);
 	}, []);
 
 	// Save name to localStorage when userName changes and rememberMe is true
@@ -308,34 +155,31 @@ export default function TherapyPage() {
 		}
 	}, [userName, rememberMe]);
 
-	// Check for previous session when userName changes
+	// Check for previous session when userName changes or after disconnect
 	useEffect(() => {
-		if (userName.trim()) {
-			const session = loadUserSession(userName.trim());
-			setHasPreviousSession(session !== null && session.transcripts.length > 0);
-		} else {
+		if (!userName.trim()) {
 			setHasPreviousSession(false);
+			return;
 		}
-	}, [userName]);
 
-	// Re-check for previous session when returning to home page (after disconnect)
-	// This ensures the dashboard link appears after the first session ends
-	useEffect(() => {
-		if (!isConnected && userName.trim()) {
-			// Use a small delay to ensure localStorage has been updated
-			const checkTimer = setTimeout(() => {
-				const session = loadUserSession(userName.trim());
-				const hasSession = session !== null && (
-					session.transcripts.length > 0 ||
+		const checkSession = () => {
+			const session = loadUserSession(userName.trim());
+			const hasSession =
+				session !== null &&
+				(session.transcripts.length > 0 ||
 					session.summaries.length > 0 ||
-					(session.moodData && session.moodData.length > 0)
-				);
-				setHasPreviousSession(hasSession);
-			}, 100);
+					(session.moodData && session.moodData.length > 0));
+			setHasPreviousSession(hasSession);
+		};
 
+		// If disconnected, wait a bit for localStorage to update
+		if (!isConnected) {
+			const checkTimer = setTimeout(checkSession, 100);
 			return () => clearTimeout(checkTimer);
+		} else {
+			checkSession();
 		}
-	}, [isConnected, userName]);
+	}, [userName, isConnected]);
 
 	const handleJoin = async () => {
 		if (!userName.trim()) return;
@@ -399,93 +243,19 @@ export default function TherapyPage() {
 		// Wait a bit to ensure all buffered messages are finalized before saving
 		await new Promise((resolve) => setTimeout(resolve, 2000));
 
-		// Simply use transcripts from state - sanitize and save
+		// Save transcripts using helper function
 		const currentTranscripts = transcriptHook.transcripts;
 		if (userName && currentTranscripts.length > 0) {
-			// Sanitize: include final messages AND agent messages (even if not final, they're usually complete)
-			// Exclude system messages (crisis resources) from saved transcripts
-			const sanitized = currentTranscripts
-				.filter((t) => t.speaker !== 'system' && (t.isFinal || t.speaker === 'agent')) // Exclude system messages
-				.map((t) => ({
-					role: t.speaker === 'agent' ? 'assistant' : t.speaker,
-					text: t.text,
-					timestamp: t.timestamp,
-				}));
-
-			console.log(
-				`[TherapyPage] Saving ${
-					sanitized.length
-				} transcripts on end call (Agent: ${
-					sanitized.filter((t) => t.role === 'assistant').length
-				}, User: ${sanitized.filter((t) => t.role === 'user').length})`
-			);
-
-			// Load existing session data
-			const existingSession = loadUserSession(userName);
-			const existingSummaries = existingSession?.summaries || [];
-
-			// Save to localStorage
-			const sessionData = {
-				userName: userName.trim(),
-				transcripts: sanitized,
-				summaries: existingSummaries,
-				lastSessionDate: Date.now(),
-			};
-
-			const key = `therapy_user_${userName.trim().toLowerCase()}`;
-			localStorage.setItem(key, JSON.stringify(sessionData));
-
-			// Immediately update hasPreviousSession since we just saved data
-			setHasPreviousSession(true);
-
-			// Mark saving as complete (localStorage save is done, summary is async)
+			await saveSessionTranscripts({
+				userName,
+				transcripts: currentTranscripts,
+				onComplete: () => {
+					setHasPreviousSession(true);
+					setIsSaving(false);
+				},
+			});
+		} else {
 			setIsSaving(false);
-
-			// Generate and save summary via API (async, don't block)
-			(async () => {
-				try {
-					const summaryResponse = await fetch('/api/summarize', {
-						method: 'POST',
-						headers: {
-							'Content-Type': 'application/json',
-						},
-						body: JSON.stringify({
-							userName: userName.trim(),
-							transcripts: sanitized,
-						}),
-					});
-
-					if (summaryResponse.ok) {
-						const data = await summaryResponse.json();
-						const summary = data.summary;
-						if (summary) {
-							// Add new summary to existing summaries
-							const updatedSummaries = [...existingSummaries, summary].slice(
-								-10
-							); // Keep last 10
-
-							// Update session data with new summaries
-							const updatedSessionData = {
-								...sessionData,
-								summaries: updatedSummaries,
-							};
-
-							localStorage.setItem(key, JSON.stringify(updatedSessionData));
-							console.log(
-								`[TherapyPage] ✓ Generated and saved summary for ${userName}`
-							);
-						}
-					} else {
-						const errorText = await summaryResponse.text();
-						console.warn(
-							'[TherapyPage] Failed to generate summary:',
-							errorText
-						);
-					}
-				} catch (error) {
-					console.error('[TherapyPage] Error generating summary:', error);
-				}
-			})();
 		}
 		transcriptHook.clearTranscripts();
 		await disconnect();
