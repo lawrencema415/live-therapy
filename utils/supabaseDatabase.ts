@@ -142,18 +142,25 @@ export async function loadTranscripts(sessionId: string): Promise<StoredTranscri
 /**
  * Load all transcripts for the current user (from most recent session)
  * Does NOT create a session if none exists - only loads existing data
+ * @param userId - Optional user ID. If not provided, will fetch from auth.
  */
-export async function loadRecentTranscripts(): Promise<StoredTranscript[]> {
+export async function loadRecentTranscripts(userId?: string): Promise<StoredTranscript[]> {
 	try {
 		const supabase = createClient();
-		const { data: { user } } = await supabase.auth.getUser();
-		if (!user) return [];
+		let finalUserId = userId;
+		
+		// Only call getUser if userId not provided
+		if (!finalUserId) {
+			const { data: { user } } = await supabase.auth.getUser();
+			if (!user) return [];
+			finalUserId = user.id;
+		}
 
 		// Get most recent session (don't use .single() to avoid 406 errors)
 		const { data: recentSessions } = await supabase
 			.from('therapy_sessions')
 			.select('id')
-			.eq('user_id', user.id)
+			.eq('user_id', finalUserId)
 			.order('session_date', { ascending: false })
 			.limit(1);
 
@@ -249,18 +256,26 @@ export async function saveSummaries(
 
 /**
  * Load all summaries for the current user (most recent first)
+ * @param limit - Maximum number of summaries to return
+ * @param userId - Optional user ID. If not provided, will fetch from auth.
  */
-export async function loadSummaries(limit: number = 10): Promise<SessionSummary[]> {
+export async function loadSummaries(limit: number = 10, userId?: string): Promise<SessionSummary[]> {
 	try {
 		const supabase = createClient();
-		const { data: { user } } = await supabase.auth.getUser();
-		if (!user) return [];
+		let finalUserId = userId;
+		
+		// Only call getUser if userId not provided
+		if (!finalUserId) {
+			const { data: { user } } = await supabase.auth.getUser();
+			if (!user) return [];
+			finalUserId = user.id;
+		}
 
 		// Get recent sessions
 		const { data: sessions } = await supabase
 			.from('therapy_sessions')
 			.select('id')
-			.eq('user_id', user.id)
+			.eq('user_id', finalUserId)
 			.order('session_date', { ascending: false })
 			.limit(50); // Get recent sessions
 
@@ -362,17 +377,24 @@ export async function saveMoodData(
 
 /**
  * Load all mood data for the current user
+ * @param userId - Optional user ID. If not provided, will fetch from auth.
  */
-export async function loadMoodData(): Promise<SessionMoodData[]> {
+export async function loadMoodData(userId?: string): Promise<SessionMoodData[]> {
 	try {
 		const supabase = createClient();
-		const { data: { user } } = await supabase.auth.getUser();
-		if (!user) return [];
+		let finalUserId = userId;
+		
+		// Only call getUser if userId not provided
+		if (!finalUserId) {
+			const { data: { user } } = await supabase.auth.getUser();
+			if (!user) return [];
+			finalUserId = user.id;
+		}
 
 		const { data: sessions } = await supabase
 			.from('therapy_sessions')
 			.select('id')
-			.eq('user_id', user.id)
+			.eq('user_id', finalUserId)
 			.order('session_date', { ascending: false });
 
 		if (!sessions || sessions.length === 0) return [];

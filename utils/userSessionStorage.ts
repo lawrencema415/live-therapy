@@ -95,13 +95,16 @@ export async function saveUserSession(userName: string, transcripts: TranscriptM
 /**
  * Load user session data from Supabase
  * Returns a UserSessionData object with transcripts, summaries, and mood data
+ * @param userName - User name (for logging/display)
+ * @param userId - Optional user ID. If provided, will be passed to database functions to avoid duplicate getUser() calls.
  */
-export async function loadUserSession(userName: string): Promise<UserSessionData | null> {
+export async function loadUserSession(userName: string, userId?: string): Promise<UserSessionData | null> {
 	try {
 		// Load transcripts, summaries, and mood data from Supabase
-		const transcripts = await loadRecentTranscripts();
-		const summaries = await loadSummariesFromDB(10);
-		const moodData = await loadMoodDataFromDB();
+		// Pass userId to avoid duplicate getUser() calls
+		const transcripts = await loadRecentTranscripts(userId);
+		const summaries = await loadSummariesFromDB(10, userId);
+		const moodData = await loadMoodDataFromDB(userId);
 
 		const agentCount = transcripts.filter(t => t.role === 'assistant').length;
 		const userCount = transcripts.filter(t => t.role === 'user').length;
@@ -176,10 +179,12 @@ export async function saveSessionSummaries(userName: string, summaries: SessionS
 
 /**
  * Load session summaries from Supabase
+ * @param userName - User name (for logging/display)
+ * @param userId - Optional user ID. If provided, will be passed to database functions to avoid duplicate getUser() calls.
  */
-export async function loadSessionSummaries(userName: string): Promise<SessionSummary[]> {
+export async function loadSessionSummaries(userName: string, userId?: string): Promise<SessionSummary[]> {
 	try {
-		return await loadSummariesFromDB(10);
+		return await loadSummariesFromDB(10, userId);
 	} catch (error) {
 		console.error('[UserSession] Error loading summaries:', error);
 		return [];
@@ -212,10 +217,12 @@ export async function saveMoodCheckIn(
 
 /**
  * Load all mood check-in data for a user from Supabase
+ * @param userName - User name (for logging/display)
+ * @param userId - Optional user ID. If provided, will be passed to database functions to avoid duplicate getUser() calls.
  */
-export async function loadMoodData(userName: string): Promise<SessionMoodData[]> {
+export async function loadMoodData(userName: string, userId?: string): Promise<SessionMoodData[]> {
 	try {
-		return await loadMoodDataFromDB();
+		return await loadMoodDataFromDB(userId);
 	} catch (error) {
 		console.error('[UserSession] Error loading mood data:', error);
 		return [];

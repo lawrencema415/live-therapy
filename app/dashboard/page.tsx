@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { ProgressDashboard } from '@/components/dashboard/ProgressDashboard';
 import {
 	loadUserSession,
@@ -16,26 +16,24 @@ export default function DashboardPage() {
 	const [summaries, setSummaries] = useState<any[]>([]);
 	const [moodData, setMoodData] = useState<any[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
+	
+	// Track if data is already loading to prevent duplicate calls
+	const isLoadingRef = useRef(false);
+	const loadedUserIdRef = useRef<string | null>(null);
 
-	useEffect(() => {
-		if (user) {
-			// Get first name from Google account metadata
-			const name =
-				user.user_metadata?.given_name ||
-				user.user_metadata?.full_name?.split(' ')[0] ||
-				user.user_metadata?.name?.split(' ')[0] ||
-				user.email?.split('@')[0] ||
-				user.id;
-			setUserName(name);
-			loadDashboardData(name);
+	// Memoize loadDashboardData to prevent recreation on every render
+	const loadDashboardData = useCallback(async (name: string, userId?: string) => {
+		// Prevent duplicate calls
+		if (isLoadingRef.current || !name.trim()) {
+			return;
 		}
-	}, [user]);
 
-	const loadDashboardData = async (name: string) => {
+		isLoadingRef.current = true;
 		try {
+			// Pass userId to avoid duplicate getUser() calls in database functions
 			const [loadedSummaries, loadedMoodData] = await Promise.all([
-				loadSessionSummaries(name),
-				loadMoodData(name),
+				loadSessionSummaries(name, userId),
+				loadMoodData(name, userId),
 			]);
 
 			setSummaries(loadedSummaries);
@@ -44,8 +42,41 @@ export default function DashboardPage() {
 			console.error('Error loading dashboard data:', error);
 		} finally {
 			setIsLoading(false);
+			isLoadingRef.current = false;
 		}
-	};
+	}, []); // Empty deps - userId is passed as parameter
+
+	useEffect(() => {
+		// Use user?.id instead of user object for more stable dependency
+		// Only load if user exists and we haven't loaded for this user yet
+		if (user?.id && loadedUserIdRef.current !== user.id) {
+			// Get first name from Google account metadata
+			const name =
+				user.user_metadata?.given_name ||
+				user.user_metadata?.full_name?.split(' ')[0] ||
+				user.user_metadata?.name?.split(' ')[0] ||
+				user.email?.split('@')[0] ||
+				user.id;
+			
+			setUserName(name);
+			
+			// Debounce the data loading to prevent rapid calls
+			const timeoutId = setTimeout(() => {
+				loadDashboardData(name, user.id);
+				loadedUserIdRef.current = user.id;
+			}, 100);
+
+			return () => {
+				clearTimeout(timeoutId);
+			};
+		} else if (!user?.id) {
+			// Reset when user logs out
+			loadedUserIdRef.current = null;
+			setUserName('');
+			setSummaries([]);
+			setMoodData([]);
+		}
+	}, [user?.id, loadDashboardData]);
 
 	if (isLoading) {
 		return (

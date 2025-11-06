@@ -228,7 +228,7 @@ function TherapyPageContent() {
 
 	// Check for previous session data asynchronously (with debounce to prevent multiple calls)
 	useClientEffect(() => {
-		if (!userName.trim()) {
+		if (!userName.trim() || !user?.id) {
 			setPreviousSessionValue(false);
 			setHasPreviousSession(false);
 			return;
@@ -236,7 +236,8 @@ function TherapyPageContent() {
 
 		let isCancelled = false;
 		const timeoutId = setTimeout(() => {
-			loadUserSession(userName.trim()).then((session) => {
+			// Pass userId to avoid duplicate getUser() calls in database functions
+			loadUserSession(userName.trim(), user.id).then((session) => {
 				if (isCancelled) return;
 				
 				const hasSession =
@@ -253,7 +254,7 @@ function TherapyPageContent() {
 			isCancelled = true;
 			clearTimeout(timeoutId);
 		};
-	}, [userName]);
+	}, [userName, user?.id]);
 
 	const handleJoin = useCallback(async () => {
 		if (!userName.trim()) return;
@@ -265,7 +266,8 @@ function TherapyPageContent() {
 			await connectToRoom(userName.trim());
 
 			// Load previous transcripts for UI display (from Supabase)
-			const session = await loadUserSession(userName.trim());
+			// Pass userId to avoid duplicate getUser() calls
+			const session = await loadUserSession(userName.trim(), user?.id);
 			if (session?.transcripts && session.transcripts.length > 0) {
 				const messages = convertStoredToMessages(session.transcripts);
 				transcriptHookRef.current.setTranscriptsFromStorage(messages);
@@ -273,7 +275,7 @@ function TherapyPageContent() {
 		} catch (error) {
 			console.error('Failed to join session:', error);
 		}
-	}, [userName, connectToRoom]);
+	}, [userName, user?.id, connectToRoom]);
 
 	const handleEndCall = useCallback(async () => {
 		// Set saving state to disable button and show "Saving..." text
