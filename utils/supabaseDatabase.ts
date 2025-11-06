@@ -9,6 +9,9 @@ import type { SessionSummary, SessionMoodData, MoodCheckInData } from '@/utils/u
  * Get or create a therapy session for the current user
  * Returns session ID or null if user is not authenticated
  */
+// Track ongoing session creation to prevent duplicate sessions
+const ongoingSessionCreation = new Map<string, Promise<string | null>>();
+
 export async function getOrCreateSession(sessionTimestamp: number = Date.now()): Promise<string | null> {
 	try {
 		const supabase = createClient();
@@ -18,45 +21,86 @@ export async function getOrCreateSession(sessionTimestamp: number = Date.now()):
 			return null;
 		}
 
-		// Try to find existing session within the same day
+		// Normalize to start of day for consistent session key
 		const sessionDate = new Date(sessionTimestamp);
 		sessionDate.setHours(0, 0, 0, 0);
-		const nextDay = new Date(sessionDate);
-		nextDay.setDate(nextDay.getDate() + 1);
-		
-		const { data: existingSessions, error: selectError } = await supabase
-			.from('therapy_sessions')
-			.select('id')
-			.eq('user_id', user.id)
-			.gte('session_date', sessionDate.toISOString())
-			.lt('session_date', nextDay.toISOString())
-			.order('session_date', { ascending: false })
-			.limit(1);
+		const sessionKey = `${user.id}-${sessionDate.getTime()}`;
 
-		if (selectError) {
-			console.error('[SupabaseDB] Error checking for existing session:', selectError);
+		// Check if session creation is already in progress for this user/day
+		const existingCreation = ongoingSessionCreation.get(sessionKey);
+		if (existingCreation) {
+			console.log(`[SupabaseDB] Session creation already in progress for key ${sessionKey}, waiting...`);
+			return await existingCreation;
 		}
 
-		if (existingSessions && existingSessions.length > 0) {
-			return existingSessions[0].id;
-		}
+		// Create the session creation promise
+		const creationPromise = (async (): Promise<string | null> => {
+			try {
+				const nextDay = new Date(sessionDate);
+				nextDay.setDate(nextDay.getDate() + 1);
+				
+				// Try to find existing session within the same day
+				const { data: existingSessions, error: selectError } = await supabase
+					.from('therapy_sessions')
+					.select('id')
+					.eq('user_id', user.id)
+					.gte('session_date', sessionDate.toISOString())
+					.lt('session_date', nextDay.toISOString())
+					.order('session_date', { ascending: false })
+					.limit(1);
 
-		// Create new session
-		const { data: newSession, error: insertError } = await supabase
-			.from('therapy_sessions')
-			.insert({
-				user_id: user.id,
-				session_date: new Date(sessionTimestamp).toISOString(),
-			})
-			.select('id')
-			.single();
+				if (selectError) {
+					console.error('[SupabaseDB] Error checking for existing session:', selectError);
+				}
 
-		if (insertError) {
-			console.error('[SupabaseDB] Error creating session:', insertError);
-			return null;
-		}
+				if (existingSessions && existingSessions.length > 0) {
+					console.log(`[SupabaseDB] Found existing session: ${existingSessions[0].id}`);
+					return existingSessions[0].id;
+				}
 
-		return newSession.id;
+				// Create new session
+				const { data: newSession, error: insertError } = await supabase
+					.from('therapy_sessions')
+					.insert({
+						user_id: user.id,
+						session_date: sessionDate.toISOString(), // Use normalized date
+					})
+					.select('id')
+					.single();
+
+				if (insertError) {
+					// If it's a unique constraint violation, try to get the existing session
+					if (insertError.code === '23505' || insertError.message?.includes('duplicate')) {
+						console.log('[SupabaseDB] Session already exists (race condition), fetching existing...');
+						const { data: existingSessions } = await supabase
+							.from('therapy_sessions')
+							.select('id')
+							.eq('user_id', user.id)
+							.gte('session_date', sessionDate.toISOString())
+							.lt('session_date', nextDay.toISOString())
+							.order('session_date', { ascending: false })
+							.limit(1);
+						
+						if (existingSessions && existingSessions.length > 0) {
+							return existingSessions[0].id;
+						}
+					}
+					console.error('[SupabaseDB] Error creating session:', insertError);
+					return null;
+				}
+
+				console.log(`[SupabaseDB] Created new session: ${newSession.id}`);
+				return newSession.id;
+			} finally {
+				// Remove from ongoing creation map
+				ongoingSessionCreation.delete(sessionKey);
+			}
+		})();
+
+		// Store the promise to prevent concurrent creation
+		ongoingSessionCreation.set(sessionKey, creationPromise);
+
+		return await creationPromise;
 	} catch (error) {
 		console.error('[SupabaseDB] Error in getOrCreateSession:', error);
 		return null;
@@ -65,6 +109,8 @@ export async function getOrCreateSession(sessionTimestamp: number = Date.now()):
 
 /**
  * Save transcripts to Supabase for a session
+ * Uses a merge approach: checks existing transcripts and only inserts new ones
+ * This prevents duplicates even with concurrent saves
  */
 export async function saveTranscripts(
 	sessionId: string,
@@ -73,37 +119,79 @@ export async function saveTranscripts(
 	try {
 		const supabase = createClient();
 		
-		// Delete existing transcripts for this session to avoid duplicates
-		await supabase
-			.from('therapy_transcripts')
-			.delete()
-			.eq('session_id', sessionId);
-
-		// Insert new transcripts
-		const transcriptsToInsert = transcripts
+		console.log(`[SupabaseDB] Saving transcripts for session ${sessionId}, input count: ${transcripts.length}`);
+		
+		// Filter and prepare transcripts
+		const validTranscripts = transcripts
 			.filter(t => t.text && t.text.trim().length > 0)
 			.map(t => ({
 				session_id: sessionId,
 				role: t.role === 'agent' ? 'assistant' : t.role,
 				text: t.text.trim(),
 				timestamp: t.timestamp,
-			}));
+			}))
+			.sort((a, b) => a.timestamp - b.timestamp); // Sort by timestamp ascending
 
-		if (transcriptsToInsert.length === 0) {
+		if (validTranscripts.length === 0) {
 			console.warn('[SupabaseDB] No valid transcripts to save');
 			return true;
 		}
 
-		const { error } = await supabase
+		// Step 1: Get existing transcripts for this session to check for duplicates
+		const { data: existingTranscripts, error: selectError } = await supabase
 			.from('therapy_transcripts')
-			.insert(transcriptsToInsert);
+			.select('role, text, timestamp')
+			.eq('session_id', sessionId);
 
-		if (error) {
-			console.error('[SupabaseDB] Error saving transcripts:', error);
+		if (selectError) {
+			console.error('[SupabaseDB] Error loading existing transcripts:', selectError);
+			// Continue anyway - might be first save
+		}
+
+		// Step 2: Create a Set of existing transcript keys for fast lookup
+		// Key format: `${timestamp}-${text}-${role}` to uniquely identify transcripts
+		const existingKeys = new Set<string>();
+		if (existingTranscripts) {
+			for (const existing of existingTranscripts) {
+				const key = `${existing.timestamp}-${existing.text.trim()}-${existing.role}`;
+				existingKeys.add(key);
+			}
+		}
+
+		// Step 3: Filter out transcripts that already exist
+		const transcriptsToInsert = validTranscripts.filter(t => {
+			const key = `${t.timestamp}-${t.text.trim()}-${t.role}`;
+			return !existingKeys.has(key);
+		});
+
+		if (transcriptsToInsert.length === 0) {
+			console.log(`[SupabaseDB] All ${validTranscripts.length} transcripts already exist for session ${sessionId}, skipping insert`);
+			return true;
+		}
+
+		console.log(`[SupabaseDB] Inserting ${transcriptsToInsert.length} new transcripts (${validTranscripts.length - transcriptsToInsert.length} already exist)`);
+
+		// Step 4: Insert only new transcripts
+		// Handle race conditions gracefully - if duplicates are inserted concurrently, that's okay
+		// The database unique constraint (if added via SQL migration) will prevent them
+		const { data: insertedData, error: insertError } = await supabase
+			.from('therapy_transcripts')
+			.insert(transcriptsToInsert)
+			.select(); // Select to ensure insert completes and get inserted rows
+
+		if (insertError) {
+			// If it's a unique constraint violation, that's okay - it means another save already inserted it
+			// This handles race conditions where two saves both check and both try to insert
+			if (insertError.code === '23505' || insertError.message?.includes('duplicate') || insertError.message?.includes('unique')) {
+				console.log(`[SupabaseDB] Some transcripts were already inserted by concurrent save (race condition handled gracefully)`);
+				return true; // Not an error - just a race condition that was handled
+			}
+			console.error('[SupabaseDB] Error inserting transcripts:', insertError);
 			return false;
 		}
 
-		console.log(`[SupabaseDB] ✓ Saved ${transcriptsToInsert.length} transcripts`);
+		const insertedCount = insertedData?.length || transcriptsToInsert.length;
+		console.log(`[SupabaseDB] ✓ Saved ${insertedCount} new transcripts for session ${sessionId} (total: ${(existingTranscripts?.length || 0) + insertedCount})`);
 		return true;
 	} catch (error) {
 		console.error('[SupabaseDB] Error in saveTranscripts:', error);
@@ -177,6 +265,8 @@ export async function loadRecentTranscripts(userId?: string): Promise<StoredTran
 
 /**
  * Save session summary to Supabase
+ * Deletes existing summaries for this session first, then inserts the new one
+ * This ensures only one summary per session (no duplicates)
  */
 export async function saveSummary(
 	sessionId: string,
@@ -184,6 +274,14 @@ export async function saveSummary(
 ): Promise<boolean> {
 	try {
 		const supabase = createClient();
+		
+		// Delete existing summaries for this session to prevent duplicates
+		await supabase
+			.from('therapy_summaries')
+			.delete()
+			.eq('session_id', sessionId);
+
+		// Insert the new summary
 		const { error } = await supabase
 			.from('therapy_summaries')
 			.insert({
@@ -200,7 +298,7 @@ export async function saveSummary(
 			return false;
 		}
 
-		console.log('[SupabaseDB] ✓ Saved session summary');
+		console.log('[SupabaseDB] ✓ Saved session summary (one per session, duplicates removed)');
 		return true;
 	} catch (error) {
 		console.error('[SupabaseDB] Error in saveSummary:', error);
@@ -210,6 +308,8 @@ export async function saveSummary(
 
 /**
  * Save multiple session summaries to Supabase
+ * Since we want one summary per session, this function now saves only the most recent summary
+ * Deletes existing summaries first to prevent duplicates
  */
 export async function saveSummaries(
 	sessionId: string,
@@ -217,36 +317,40 @@ export async function saveSummaries(
 ): Promise<boolean> {
 	try {
 		const supabase = createClient();
-		
-		// Delete existing summaries for this session
-		await supabase
-			.from('therapy_summaries')
-			.delete()
-			.eq('session_id', sessionId);
 
 		if (summaries.length === 0) {
 			return true;
 		}
 
-		const summariesToInsert = summaries.map(s => ({
-			session_id: sessionId,
-			timestamp: s.timestamp,
-			key_themes: s.keyThemes || [],
-			emotional_state: s.emotionalState,
-			open_issues: s.openIssues || [],
-			summary: s.summary,
-		}));
+		// Delete existing summaries for this session to prevent duplicates
+		await supabase
+			.from('therapy_summaries')
+			.delete()
+			.eq('session_id', sessionId);
 
+		// Only save the most recent summary for this session (prevent duplicates)
+		// Sort by timestamp descending and take the first one
+		const mostRecentSummary = summaries
+			.sort((a, b) => b.timestamp - a.timestamp)[0];
+
+		// Insert the most recent summary
 		const { error } = await supabase
 			.from('therapy_summaries')
-			.insert(summariesToInsert);
+			.insert({
+				session_id: sessionId,
+				timestamp: mostRecentSummary.timestamp,
+				key_themes: mostRecentSummary.keyThemes || [],
+				emotional_state: mostRecentSummary.emotionalState,
+				open_issues: mostRecentSummary.openIssues || [],
+				summary: mostRecentSummary.summary,
+			});
 
 		if (error) {
 			console.error('[SupabaseDB] Error saving summaries:', error);
 			return false;
 		}
 
-		console.log(`[SupabaseDB] ✓ Saved ${summariesToInsert.length} summaries`);
+		console.log(`[SupabaseDB] ✓ Saved most recent summary for session (one per session, duplicates removed)`);
 		return true;
 	} catch (error) {
 		console.error('[SupabaseDB] Error in saveSummaries:', error);

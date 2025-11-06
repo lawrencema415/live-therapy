@@ -89,17 +89,23 @@ export function useRoomConnection({
 			});
 
 			// Load existing transcripts from storage
+			// Note: This is only for loading previous session transcripts on reconnect
+			// New transcripts come via text stream handlers, not from storage
 			setTimeout(async () => {
 				const loadedTranscripts = await loadTranscriptsFromStorage(currentRoom);
 				if (loadedTranscripts.length > 0) {
+					console.log(`[RoomConnection] Loaded ${loadedTranscripts.length} transcripts from storage (previous session)`);
 					onTranscriptsUpdate(loadedTranscripts);
 				}
 			}, 1000);
 
 			// Listen for participant attribute changes to update transcripts and load summaries
+			// Note: This should only update if transcripts are actually different (not duplicate)
 			currentRoom.on(RoomEvent.ParticipantAttributesChanged, async () => {
 				const loadedTranscripts = await loadTranscriptsFromStorage(currentRoom);
 				if (loadedTranscripts.length > 0) {
+					console.log(`[RoomConnection] Participant attributes changed, loaded ${loadedTranscripts.length} transcripts from storage`);
+					// Only update if we have new transcripts (setTranscriptsFromStorage will deduplicate)
 					onTranscriptsUpdate(loadedTranscripts);
 				}
 				

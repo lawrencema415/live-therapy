@@ -56,6 +56,7 @@ function TherapyPageContent() {
 	const [hasPreviousSession, setHasPreviousSession] = useState(false);
 	const [isLoading, setIsLoading] = useState(true);
 	const [isSaving, setIsSaving] = useState(false);
+	const hasSavedRef = useRef(false); // Track if transcripts have been saved for this session
 
 	// Transcript management (initialize first)
 	const transcriptHook = useTranscripts();
@@ -164,29 +165,60 @@ function TherapyPageContent() {
 	}, [isConnected, resetCrisisDetection]);
 
 	// Save transcripts when session ends (only for automatic disconnects, not user-initiated)
+	// NOTE: This should NOT run if handleEndCall already saved (hasSavedRef.current will be true)
 	useEffect(() => {
-		if (!isConnected && userName && !isSaving) {
+		if (!isConnected && userName && !isSaving && !hasSavedRef.current) {
+			// Use a ref to track if this effect has already initiated a save
+			// This prevents the timeout from running multiple times if the effect re-runs
+			let saveInitiated = false;
+			
 			// Finalize all buffered messages first
 			transcriptHookRef.current.finalizeAllBuffers();
 
 			// Wait a bit to ensure all buffered messages are finalized
 			const saveTimeout = setTimeout(() => {
-				const currentTranscripts = transcriptHookRef.current.transcripts;
-				if (currentTranscripts.length > 0) {
-					saveSessionTranscripts({
-						userName,
-						transcripts: currentTranscripts,
-						onComplete: () => {
-							setHasPreviousSession(true);
-							transcriptHookRef.current.clearTranscripts();
-						},
-					});
-				} else {
-					console.log(`[TherapyPage] No transcripts to save on disconnect`);
+				// Double-check: prevent duplicate saves if another save already started
+				if (hasSavedRef.current || saveInitiated) {
+					console.log(`[TherapyPage] Save already initiated, skipping duplicate save on disconnect`);
+					return;
 				}
+				
+				// Get deduplicated transcripts
+				const allTranscripts = transcriptHookRef.current.getAllTranscripts();
+				const finalTranscripts = allTranscripts.filter(t => t.isFinal);
+				
+				if (finalTranscripts.length === 0) {
+					console.log(`[TherapyPage] No transcripts to save on disconnect`);
+					return;
+				}
+				
+				// Deduplicate one more time (safety check)
+				const seen = new Map<string, typeof finalTranscripts[0]>();
+				for (const transcript of finalTranscripts) {
+					const key = `${transcript.speaker}-${transcript.text.trim()}-${transcript.timestamp}`;
+					if (!seen.has(key)) {
+						seen.set(key, transcript);
+					}
+				}
+				const deduplicatedTranscripts = Array.from(seen.values()).sort((a, b) => a.timestamp - b.timestamp);
+				
+				// Mark as saved BEFORE calling saveSessionTranscripts to prevent race conditions
+				hasSavedRef.current = true;
+				saveInitiated = true;
+				
+				saveSessionTranscripts({
+					userName,
+					transcripts: deduplicatedTranscripts,
+					onComplete: () => {
+						setHasPreviousSession(true);
+						transcriptHookRef.current.clearTranscripts();
+					},
+				});
 			}, 2000);
 
-			return () => clearTimeout(saveTimeout);
+			return () => {
+				clearTimeout(saveTimeout);
+			};
 		}
 	}, [isConnected, userName, isSaving]);
 
@@ -196,16 +228,48 @@ function TherapyPageContent() {
 		userNameRef.current = userName;
 	}, [userName]);
 
-	// Cleanup on unmount - save transcripts and disconnect
+	// Cleanup on unmount - save transcripts and disconnect (only if not already saved)
+	// NOTE: This should NOT run if handleEndCall or disconnect useEffect already saved
 	useEffect(() => {
 		return () => {
+			// Check immediately if already saved - don't even process transcripts if already saved
+			if (hasSavedRef.current) {
+				console.log('[TherapyPage] Already saved on unmount, skipping cleanup save');
+				roomConnectionRef.current?.disconnect().catch(console.error);
+				return;
+			}
+			
 			transcriptHookRef.current.finalizeAllBuffers();
-			const currentTranscripts = transcriptHookRef.current.transcripts;
+			
+			// Get deduplicated transcripts
+			const allTranscripts = transcriptHookRef.current.getAllTranscripts();
+			const finalTranscripts = allTranscripts.filter(t => t.isFinal);
+			
+			if (finalTranscripts.length === 0) {
+				roomConnectionRef.current?.disconnect().catch(console.error);
+				return;
+			}
+			
+			// Deduplicate one more time (safety check)
+			const seen = new Map<string, typeof finalTranscripts[0]>();
+			for (const transcript of finalTranscripts) {
+				const key = `${transcript.speaker}-${transcript.text.trim()}-${transcript.timestamp}`;
+				if (!seen.has(key)) {
+					seen.set(key, transcript);
+				}
+			}
+			const deduplicatedTranscripts = Array.from(seen.values()).sort((a, b) => a.timestamp - b.timestamp);
+			
 			const currentUserName = userNameRef.current;
-			if (currentUserName && currentTranscripts.length > 0) {
+			// Mark as saved BEFORE calling saveSessionTranscripts to prevent race conditions
+			if (currentUserName && deduplicatedTranscripts.length > 0 && !hasSavedRef.current) {
+				hasSavedRef.current = true; // Mark as saved to prevent duplicate saves
+				// Note: This is fire-and-forget on unmount - we can't await it
 				saveSessionTranscripts({
 					userName: currentUserName,
-					transcripts: currentTranscripts,
+					transcripts: deduplicatedTranscripts,
+				}).catch(error => {
+					console.error('[TherapyPage] Error saving on unmount:', error);
 				});
 			}
 			roomConnectionRef.current?.disconnect().catch(console.error);
@@ -259,6 +323,9 @@ function TherapyPageContent() {
 	const handleJoin = useCallback(async () => {
 		if (!userName.trim()) return;
 
+		// Reset saved flag when starting a new session
+		hasSavedRef.current = false;
+
 		try {
 			// No longer need to load transcripts/summaries here
 			// Agent will fetch them securely from Supabase using authenticated user ID
@@ -278,8 +345,18 @@ function TherapyPageContent() {
 	}, [userName, user?.id, connectToRoom]);
 
 	const handleEndCall = useCallback(async () => {
+		// Prevent duplicate saves
+		if (hasSavedRef.current) {
+			console.log('[TherapyPage] Transcripts already saved, skipping duplicate save');
+			await roomConnectionRef.current?.disconnect();
+			return;
+		}
+
 		// Set saving state to disable button and show "Saving..." text
 		setIsSaving(true);
+
+		// Mark as saved immediately to prevent other effects from saving
+		hasSavedRef.current = true;
 
 		// Finalize all buffered messages first
 		transcriptHookRef.current.finalizeAllBuffers();
@@ -287,13 +364,28 @@ function TherapyPageContent() {
 		// Wait a bit to ensure all buffered messages are finalized before saving
 		await new Promise((resolve) => setTimeout(resolve, 2000));
 
-		// Save transcripts using helper function
-		const currentTranscripts = transcriptHookRef.current.transcripts;
+		// Get transcripts - use getAllTranscripts to ensure we get deduplicated final messages
+		const currentTranscripts = transcriptHookRef.current.getAllTranscripts();
+		
+		// Deduplicate one more time before saving (safety check)
+		const seen = new Map<string, typeof currentTranscripts[0]>();
+		for (const transcript of currentTranscripts) {
+			if (!transcript.isFinal) continue; // Skip non-final
+			const key = `${transcript.speaker}-${transcript.text.trim()}-${transcript.timestamp}`;
+			if (!seen.has(key)) {
+				seen.set(key, transcript);
+			}
+		}
+		const deduplicatedTranscripts = Array.from(seen.values()).sort((a, b) => a.timestamp - b.timestamp);
+		
+		if (deduplicatedTranscripts.length !== currentTranscripts.filter(t => t.isFinal).length) {
+			console.log(`[TherapyPage] Deduplicated transcripts before saving: ${currentTranscripts.filter(t => t.isFinal).length} -> ${deduplicatedTranscripts.length}`);
+		}
 		const currentUserName = userNameRef.current;
-		if (currentUserName && currentTranscripts.length > 0) {
+		if (currentUserName && deduplicatedTranscripts.length > 0) {
 			await saveSessionTranscripts({
 				userName: currentUserName,
-				transcripts: currentTranscripts,
+				transcripts: deduplicatedTranscripts,
 				onComplete: () => {
 					setHasPreviousSession(true);
 					setIsSaving(false);

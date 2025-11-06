@@ -6,7 +6,7 @@ import { storeTranscriptsInStorage } from '@/utils/transcriptStorage';
 import type { Room } from 'livekit-client';
 
 const MERGE_TIME_WINDOW = 2000; // 2 seconds - messages within this time are merged
-const FINALIZE_DELAY = 1500; // 1.5 seconds - delay before finalizing merged messages
+const FINALIZE_DELAY = 2000; // 2 seconds - delay before finalizing merged messages
 
 export function useTranscripts() {
 	const [transcripts, setTranscripts] = useState<TranscriptMessage[]>([]);
@@ -48,6 +48,24 @@ export function useTranscripts() {
 					const filtered = prev.filter(
 						(msg) => msg.isFinal || msg.speaker !== speaker
 					);
+
+					// Deduplicate: Check if a message with the same text and timestamp already exists
+					// This prevents duplicates when finalizing buffered messages
+					const isDuplicate = filtered.some(
+						(msg) =>
+							msg.isFinal &&
+							msg.speaker === speaker &&
+							msg.text.trim() === mergedText.trim() &&
+							Math.abs(msg.timestamp - mergedMessage.timestamp) < 5000 // Within 5 seconds
+					);
+
+					if (isDuplicate) {
+						console.log(`[Merge] Skipping duplicate merged message for ${speaker}: "${mergedText.substring(0, 50)}..."`);
+						// Update ref with existing messages only
+						const finalOnly = filtered.filter(m => m.isFinal);
+						allTranscriptsRef.current = finalOnly;
+						return filtered; // Return without adding duplicate
+					}
 
 					// Add merged message
 					const updated = [...filtered, mergedMessage];
@@ -169,10 +187,30 @@ export function useTranscripts() {
 
 	/**
 	 * Set transcripts (used when loading from storage)
+	 * Deduplicates transcripts before setting to prevent duplicates
 	 */
 	const setTranscriptsFromStorage = useCallback((newTranscripts: TranscriptMessage[]) => {
-		setTranscripts(newTranscripts);
-		allTranscriptsRef.current = newTranscripts; // Keep ref in sync
+		// Deduplicate transcripts by id, text, timestamp, and speaker
+		const seen = new Map<string, TranscriptMessage>();
+		
+		for (const transcript of newTranscripts) {
+			// Create unique key from speaker, text, and timestamp
+			const key = `${transcript.speaker}-${transcript.text.trim()}-${transcript.timestamp}`;
+			
+			// Only keep the first occurrence (or prefer final messages)
+			if (!seen.has(key) || (!seen.get(key)?.isFinal && transcript.isFinal)) {
+				seen.set(key, transcript);
+			}
+		}
+		
+		const deduplicated = Array.from(seen.values()).sort((a, b) => a.timestamp - b.timestamp);
+		
+		if (deduplicated.length !== newTranscripts.length) {
+			console.log(`[Transcripts] Deduplicated transcripts: ${newTranscripts.length} -> ${deduplicated.length}`);
+		}
+		
+		setTranscripts(deduplicated);
+		allTranscriptsRef.current = deduplicated.filter(m => m.isFinal); // Keep ref in sync with final only
 	}, []);
 
 	/**
