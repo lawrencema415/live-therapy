@@ -19,7 +19,7 @@ export function JoinScreen({
 	onLogout,
 }: JoinScreenProps) {
 	return (
-		<div className='min-h-screen flex items-center justify-center p-4 sm:p-6 bg-linear-to-br from-blue-50 via-purple-50 to-pink-50'>
+		<div className='min-h-screen flex items-center justify-center p-4 sm:p-6 therapy-background'>
 			<div className='bg-white rounded-3xl shadow-2xl p-8 sm:p-10 max-w-md w-full border border-slate-100'>
 				<div className='text-center mb-8'>
 					<h1 className='text-3xl sm:text-4xl font-bold text-slate-800 mb-2'>
