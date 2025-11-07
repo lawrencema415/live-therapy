@@ -344,6 +344,25 @@ export function useRoomConnection({
 		}
 	}, [isMuted]);
 
+	// Force mute microphone (used when modal opens)
+	const muteMicrophone = useCallback(() => {
+		if (micTrackRef.current && !isMuted) {
+			micTrackRef.current.mute();
+			setIsMuted(true);
+			console.log('[RoomConnection] Microphone force muted');
+		}
+	}, [isMuted]);
+
+	// Pause agent audio by setting volume to 0 and pausing playback
+	const pauseAgentAudio = useCallback(() => {
+		const audioElements = Array.from(document.querySelectorAll('audio'));
+		audioElements.forEach((audio) => {
+			audio.volume = 0;
+			audio.pause();
+		});
+		console.log('[RoomConnection] Agent audio paused');
+	}, []);
+
 	const disconnect = useCallback(async () => {
 		if (roomRef.current) {
 			try {
@@ -384,6 +403,8 @@ export function useRoomConnection({
 		connectToRoom,
 		disconnect,
 		toggleMute,
+		muteMicrophone,
+		pauseAgentAudio,
 		getRoom: () => roomRef.current,
 	};
 }

@@ -138,6 +138,8 @@ function TherapyPageContent() {
 		connectToRoom,
 		disconnect,
 		toggleMute,
+		muteMicrophone,
+		pauseAgentAudio,
 		getRoom,
 	} = useRoomConnection({
 		onTranscriptsUpdate: handleTranscriptsUpdate,
@@ -149,6 +151,15 @@ function TherapyPageContent() {
 	useEffect(() => {
 		roomConnectionRef.current = { getRoom, disconnect };
 	}, [getRoom, disconnect]);
+
+	// TODO: Update logic later, we should just end session when this modal is open
+	// Mute microphone and pause agent audio when post-session modal is open
+	useEffect(() => {
+		if (showPostMoodCheckIn && isConnected) {
+			muteMicrophone();
+			pauseAgentAudio();
+		}
+	}, [showPostMoodCheckIn, isConnected, muteMicrophone, pauseAgentAudio]);
 
 	// Update transcript hook when room changes and reset crisis detection
 	useEffect(() => {
@@ -381,9 +392,13 @@ function TherapyPageContent() {
 			return;
 		}
 
+		// Mute microphone and pause agent audio before showing modal
+		muteMicrophone();
+		pauseAgentAudio();
+
 		// Show post-session mood check-in before saving
 		setShowPostMoodCheckIn(true);
-	}, []);
+	}, [muteMicrophone, pauseAgentAudio]);
 
 	const handleSaveAndDisconnect = useCallback(async () => {
 		// Set saving state to disable button and show "Saving..." text
