@@ -44,10 +44,15 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 	}, [supabase.auth]);
 
 	const signInWithGoogle = async () => {
+		// Ensure we use the correct origin - prefer environment variable for production
+		const redirectUrl = process.env.NEXT_PUBLIC_SITE_URL
+			? `${process.env.NEXT_PUBLIC_SITE_URL}/auth/callback`
+			: `${window.location.origin}/auth/callback`;
+
 		const { error } = await supabase.auth.signInWithOAuth({
 			provider: 'google',
 			options: {
-				redirectTo: `${window.location.origin}/auth/callback`,
+				redirectTo: redirectUrl,
 			},
 		});
 		if (error) {
@@ -80,4 +85,3 @@ export function useAuth() {
 	}
 	return context;
 }
-
