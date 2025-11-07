@@ -94,6 +94,10 @@ export async function saveSessionTranscripts({
 				}, User: ${deduplicated.filter((t) => t.role === 'user').length})`
 			);
 
+			// Load the most recent previous summary to provide context
+			const existingSummaries = await loadSessionSummaries(userName);
+			const previousSummary = existingSummaries.length > 0 ? existingSummaries[existingSummaries.length - 1] : null;
+
 			// Generate and save summary via API (async, don't block)
 			fetch('/api/summarize', {
 				method: 'POST',
@@ -103,6 +107,7 @@ export async function saveSessionTranscripts({
 				body: JSON.stringify({
 					userName: userName.trim(),
 					transcripts: sanitized,
+					previousSummary: previousSummary || undefined,
 				}),
 			})
 				.then(async (response) => {
@@ -110,8 +115,7 @@ export async function saveSessionTranscripts({
 						const data = await response.json();
 						const summary = data.summary;
 						if (summary) {
-							// Load existing summaries and add new one
-							const existingSummaries = await loadSessionSummaries(userName);
+							// Add new summary to existing ones (we already loaded them above)
 							const updatedSummaries = [...existingSummaries, summary].slice(-10);
 							await saveSessionSummaries(userName, updatedSummaries);
 							console.log(`[SessionSave] ✓ Generated and saved summary for ${userName}`);

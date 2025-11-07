@@ -20,7 +20,8 @@ interface Transcript {
 // Generate a template-based summary (no API calls required, always works)
 function generateTemplateSummary(
 	userName: string,
-	transcripts: Transcript[]
+	transcripts: Transcript[],
+	previousSummary?: SessionSummary | null
 ): SessionSummary {
 	const userMessages = transcripts.filter((t) => t.role === 'user').map((t) => t.text);
 
@@ -137,7 +138,8 @@ function generateTemplateSummary(
 // Generate session summary using Google Gemini API with template fallback
 async function generateSessionSummary(
 	userName: string,
-	transcripts: Transcript[]
+	transcripts: Transcript[],
+	previousSummary?: SessionSummary | null
 ): Promise<SessionSummary | null> {
 	if (transcripts.length === 0) return null;
 
@@ -151,6 +153,21 @@ async function generateSessionSummary(
 				.join('\n')
 				.slice(0, 30000); // Limit length for Gemini API
 
+			// Build prompt with previous summary context if available
+			let previousSummaryContext = '';
+			if (previousSummary) {
+				const prevDate = new Date(previousSummary.timestamp).toLocaleDateString();
+				previousSummaryContext = `
+
+PREVIOUS SESSION SUMMARY (${prevDate}):
+- Key Themes: ${previousSummary.keyThemes.join(', ')}
+- Emotional State: ${previousSummary.emotionalState}
+- Open Issues: ${previousSummary.openIssues.length > 0 ? previousSummary.openIssues.join(', ') : 'None'}
+- Summary: ${previousSummary.summary}
+
+Use this previous session context to understand continuity and track progress.`;
+			}
+
 			const prompt = `You are a professional therapist reviewing a therapy session transcript. Create a concise summary focusing on:
 
 1. Key themes discussed (2-4 main topics)
@@ -158,9 +175,9 @@ async function generateSessionSummary(
 3. Open issues or concerns that need follow-up
 4. A brief overall summary (2-3 sentences)
 
-Patient name: ${userName}
+Patient name: ${userName}${previousSummaryContext}
 
-Session transcript:
+CURRENT SESSION TRANSCRIPT:
 ${conversationText}
 
 Respond with a JSON object in this exact format (no markdown, just JSON):
@@ -270,13 +287,13 @@ Respond with a JSON object in this exact format (no markdown, just JSON):
 
 	// Fallback to template-based summary (always works, no API needed)
 	console.log('[Summary] Generating template-based summary...');
-	return generateTemplateSummary(userName, transcripts);
+	return generateTemplateSummary(userName, transcripts, previousSummary);
 }
 
 export async function POST(request: NextRequest) {
 	try {
 		const body = await request.json();
-		const { userName, transcripts } = body;
+		const { userName, transcripts, previousSummary } = body;
 
 		if (!userName || !transcripts || !Array.isArray(transcripts)) {
 			return NextResponse.json(
@@ -286,10 +303,10 @@ export async function POST(request: NextRequest) {
 		}
 
 		console.log(
-			`[Summarize API] Generating summary for ${userName} with ${transcripts.length} transcripts`
+			`[Summarize API] Generating summary for ${userName} with ${transcripts.length} transcripts${previousSummary ? ' (with previous summary context)' : ''}`
 		);
 
-		const summary = await generateSessionSummary(userName, transcripts);
+		const summary = await generateSessionSummary(userName, transcripts, previousSummary || null);
 
 		if (!summary) {
 			return NextResponse.json(
