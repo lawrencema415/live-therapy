@@ -159,7 +159,7 @@ export function MoodTrendsChart({ trends }: MoodTrendsChartProps) {
 	}
 
 	return (
-		<div className='w-full h-64 sm:h-80 bg-gradient-to-br from-slate-50 to-slate-100 rounded-xl p-4'>
+		<div className='w-full h-64 sm:h-80 bg-linear-to-br from-slate-50 to-slate-100 rounded-xl p-4'>
 			<ResponsiveContainer width='100%' height='100%'>
 				<ComposedChart
 					data={chartData}

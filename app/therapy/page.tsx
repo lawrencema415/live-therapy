@@ -11,7 +11,6 @@ import { RoomHeader } from '@/components/room/RoomHeader';
 import { TranscriptList } from '@/components/room/TranscriptList';
 import {
 	loadUserSession,
-	convertStoredToMessages,
 	saveSessionSummaries,
 	saveMoodCheckIn,
 	type SessionSummary,
@@ -52,6 +51,8 @@ function TherapyPageContent() {
 	const [initialRating, setInitialRating] = useState<number | undefined>(
 		undefined
 	);
+	const [lastSessionSummary, setLastSessionSummary] =
+		useState<SessionSummary | null>(null);
 
 	// Transcript management (initialize first)
 	const transcriptHook = useTranscripts();
@@ -109,6 +110,12 @@ function TherapyPageContent() {
 			message: Parameters<ReturnType<typeof useTranscripts>['addTranscript']>[0]
 		) => {
 			transcriptHookRef.current.addTranscript(message);
+
+			// Auto-dismiss summary when conversation starts
+			if (lastSessionSummary) {
+				setLastSessionSummary(null);
+			}
+
 			// Check for crisis keywords in user messages
 			checkForCrisis(message);
 
@@ -144,7 +151,7 @@ function TherapyPageContent() {
 				}
 			}
 		},
-		[checkForCrisis, userName]
+		[checkForCrisis, userName, lastSessionSummary]
 	);
 
 	const handleSummariesReceived = useCallback(
@@ -381,13 +388,20 @@ function TherapyPageContent() {
 			// Token route now handles authentication and includes user ID in token metadata
 			await connectToRoom(userName.trim());
 
-			// Load previous transcripts for UI display (from Supabase)
+			// Load last session summary for display (not saved to DB, just for reminder)
 			// Pass userId to avoid duplicate getUser() calls
 			const session = await loadUserSession(userName.trim(), user?.id);
-			if (session?.transcripts && session.transcripts.length > 0) {
-				const messages = convertStoredToMessages(session.transcripts);
-				transcriptHookRef.current.setTranscriptsFromStorage(messages);
+			if (session?.summaries && session.summaries.length > 0) {
+				// Get the most recent summary (last one in the array)
+				const mostRecentSummary =
+					session.summaries[session.summaries.length - 1];
+				setLastSessionSummary(mostRecentSummary);
+				console.log('[TherapyPage] Loaded last session summary for display');
+			} else {
+				setLastSessionSummary(null);
 			}
+
+			// Don't load old transcripts - just show the summary
 		} catch (error) {
 			console.error('Failed to join session:', error);
 		}
@@ -556,7 +570,11 @@ function TherapyPageContent() {
 						showDashboardLink={false}
 					/>
 					<div className='relative'>
-						<TranscriptList transcripts={transcriptHook.transcripts} />
+						<TranscriptList
+							transcripts={transcriptHook.transcripts}
+							lastSessionSummary={lastSessionSummary}
+							onDismissSummary={() => setLastSessionSummary(null)}
+						/>
 						{(() => {
 							const lastMessage =
 								transcriptHook.transcripts[

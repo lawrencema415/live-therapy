@@ -2,13 +2,21 @@
 
 import { useEffect, useRef } from 'react';
 import type { TranscriptMessage } from '@/types/room';
+import type { SessionSummary } from '@/utils/userSessionStorage';
 import { TranscriptMessageComponent } from './TranscriptMessage';
+import { LastSessionSummary } from './LastSessionSummary';
 
 interface TranscriptListProps {
 	transcripts: TranscriptMessage[];
+	lastSessionSummary?: SessionSummary | null;
+	onDismissSummary?: () => void;
 }
 
-export function TranscriptList({ transcripts }: TranscriptListProps) {
+export function TranscriptList({
+	transcripts,
+	lastSessionSummary,
+	onDismissSummary,
+}: TranscriptListProps) {
 	const scrollContainerRef = useRef<HTMLDivElement>(null);
 	const shouldAutoScrollRef = useRef(true);
 	const lastTranscriptCountRef = useRef(0);
@@ -96,6 +104,12 @@ export function TranscriptList({ transcripts }: TranscriptListProps) {
 				ref={scrollContainerRef}
 				className='space-y-3 min-h-[400px] max-h-[600px] overflow-y-auto pb-20'
 			>
+				{lastSessionSummary && onDismissSummary && (
+					<LastSessionSummary
+						summary={lastSessionSummary}
+						onDismiss={onDismissSummary}
+					/>
+				)}
 				{transcripts.length === 0 ? (
 					<div className='text-center py-12 text-gray-400'>
 						<p>Waiting for conversation to start...</p>

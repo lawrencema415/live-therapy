@@ -95,19 +95,21 @@ export function ProgressDashboard({
 		const sessionsWithMoodChange = moodTrends.filter(
 			(t) => t.change !== null && t.change > 0
 		).length;
+		const sessionsWithChange = moodTrends.filter((t) => t.change !== null);
 		const averageMoodImprovement =
-			moodTrends.length > 0
-				? moodTrends
-						.filter((t) => t.change !== null)
-						.reduce((sum, t) => sum + (t.change || 0), 0) /
-				  moodTrends.filter((t) => t.change !== null).length
-				: 0;
+			sessionsWithChange.length > 0
+				? sessionsWithChange.reduce((sum, t) => sum + (t.change || 0), 0) /
+				  sessionsWithChange.length
+				: null;
 
 		return {
 			totalSessions,
 			totalMoodCheckIns,
 			sessionsWithMoodChange,
-			averageMoodImprovement: averageMoodImprovement.toFixed(1),
+			averageMoodImprovement:
+				averageMoodImprovement !== null
+					? averageMoodImprovement.toFixed(1)
+					: null,
 		};
 	}, [summaries, moodData, moodTrends]);
 
@@ -179,7 +181,11 @@ export function ProgressDashboard({
 								</div>
 							</div>
 							<div className='text-2xl sm:text-3xl font-bold text-blue-600'>
-								+{metrics.averageMoodImprovement}
+								{metrics.averageMoodImprovement !== null ? (
+									<>+{metrics.averageMoodImprovement}</>
+								) : (
+									<span className='text-slate-400 text-lg sm:text-xl'>—</span>
+								)}
 							</div>
 						</div>
 					</div>
