@@ -25,6 +25,7 @@ export function useRoomConnection({
 	const roomRef = useRef<Room | null>(null);
 	const micTrackRef = useRef<LocalAudioTrack | null>(null);
 	const shouldAutoUnmuteRef = useRef(false);
+	const ignoreDisconnectRef = useRef(false); // Prevent disconnect event from updating state when user cancels navigation
 
 	const connectToRoom = useCallback(async (
 		userName: string
@@ -84,8 +85,15 @@ export function useRoomConnection({
 			// Listen for room disconnect events
 			currentRoom.on(RoomEvent.Disconnected, () => {
 				console.log('Room disconnected');
-				setIsConnected(false);
-				roomRef.current = null;
+				// Only update state if we're not ignoring disconnects (user cancelled navigation)
+				if (!ignoreDisconnectRef.current) {
+					setIsConnected(false);
+					roomRef.current = null;
+				} else {
+					console.log('[RoomConnection] Ignoring disconnect event - user cancelled navigation');
+					// Reset the flag after handling
+					ignoreDisconnectRef.current = false;
+				}
 			});
 
 			// Load existing transcripts from storage
@@ -394,6 +402,12 @@ export function useRoomConnection({
 		setIsMuted(false);
 	}, []);
 
+	// Function to ignore disconnect events (used when user cancels navigation)
+	const ignoreDisconnect = useCallback(() => {
+		ignoreDisconnectRef.current = true;
+		console.log('[RoomConnection] Ignoring next disconnect event - user cancelled navigation');
+	}, []);
+
 	return {
 		isConnected,
 		isConnecting,
@@ -405,6 +419,7 @@ export function useRoomConnection({
 		toggleMute,
 		muteMicrophone,
 		pauseAgentAudio,
+		ignoreDisconnect,
 		getRoom: () => roomRef.current,
 	};
 }

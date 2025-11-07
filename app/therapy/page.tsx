@@ -140,6 +140,7 @@ function TherapyPageContent() {
 		toggleMute,
 		muteMicrophone,
 		pauseAgentAudio,
+		ignoreDisconnect,
 		getRoom,
 	} = useRoomConnection({
 		onTranscriptsUpdate: handleTranscriptsUpdate,
@@ -160,6 +161,148 @@ function TherapyPageContent() {
 			pauseAgentAudio();
 		}
 	}, [showPostMoodCheckIn, isConnected, muteMicrophone, pauseAgentAudio]);
+
+	// Prevent accidental navigation away from active session
+	const navigationBlockedRef = useRef(false);
+	const historyStatePushedRef = useRef(false);
+	const isActuallyLeavingRef = useRef(false);
+
+	useEffect(() => {
+		// Only show confirmation if there's an active session or unsaved data
+		const shouldBlockNavigation =
+			isConnected ||
+			(transcriptHook.transcripts.length > 0 && !hasSavedRef.current);
+
+		if (!shouldBlockNavigation) {
+			navigationBlockedRef.current = false;
+			historyStatePushedRef.current = false;
+			isActuallyLeavingRef.current = false;
+			return; // No need to block if no active session
+		}
+
+		navigationBlockedRef.current = true;
+		isActuallyLeavingRef.current = false;
+
+		// Handle browser close/refresh
+		// This shows the browser's confirmation dialog
+		const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+			// Only show confirmation if we have an active session
+			if (navigationBlockedRef.current) {
+				// Set flag to ignore disconnect events in case user cancels
+				// This prevents the room disconnect event from updating state
+				ignoreDisconnect();
+				e.preventDefault();
+				// Modern browsers require returnValue to be set
+				e.returnValue = '';
+
+				// Check after a short delay if user cancelled (page still visible)
+				// If user cancelled, verify room is still connected and reconnect if needed
+				setTimeout(() => {
+					if (
+						!document.hidden &&
+						navigationBlockedRef.current &&
+						!isActuallyLeavingRef.current
+					) {
+						// User likely cancelled - check if room is still connected
+						const room = roomConnectionRef.current?.getRoom();
+						if (room && room.state !== 'connected') {
+							console.log(
+								'[TherapyPage] Room disconnected after user cancelled - attempting to maintain connection'
+							);
+							// Room disconnected but user cancelled - the ignoreDisconnect flag
+							// prevented state update, but we should note this for potential reconnection
+							// The room might reconnect automatically, so we'll just log it
+						}
+					}
+				}, 500);
+
+				return '';
+			}
+		};
+
+		// Handle actual page unload (only fires if user confirmed leaving)
+		// This is different from beforeunload - it only fires if the page is actually unloading
+		const handlePageHide = () => {
+			// If pagehide fires, it means the user confirmed leaving
+			// Mark that we're actually leaving so cleanup can proceed
+			if (navigationBlockedRef.current) {
+				isActuallyLeavingRef.current = true;
+				console.log(
+					'[TherapyPage] Page is actually unloading - user confirmed leaving'
+				);
+				// User confirmed, so we should allow disconnect events to update state
+				// The ignoreDisconnect flag will be reset by the disconnect handler
+			}
+		};
+
+		// Handle visibility change (page hidden but not unloaded - e.g., tab switch)
+		// We should NOT disconnect in this case
+		const handleVisibilityChange = () => {
+			if (document.hidden) {
+				// Page is hidden but not unloaded - don't disconnect
+				console.log(
+					'[TherapyPage] Page hidden (tab switch) - keeping session alive'
+				);
+			} else {
+				// Page is visible again - session should still be connected
+				console.log(
+					'[TherapyPage] Page visible again - session should still be connected'
+				);
+				// If page becomes visible after beforeunload, user likely cancelled
+				// Verify room connection is still active
+				if (navigationBlockedRef.current && !isActuallyLeavingRef.current) {
+					const room = roomConnectionRef.current?.getRoom();
+					if (room && room.state !== 'connected') {
+						console.warn(
+							'[TherapyPage] Room disconnected after user cancelled - connection may need attention'
+						);
+					}
+				}
+			}
+		};
+
+		// Handle back button navigation
+		const handlePopState = () => {
+			if (!navigationBlockedRef.current) {
+				return; // Allow navigation if blocking is disabled
+			}
+
+			// Check if user really wants to leave
+			const confirmed = window.confirm(
+				'Are you sure you want to leave? Your session may not be saved if you navigate away.'
+			);
+
+			if (!confirmed) {
+				// Push state back to prevent navigation
+				window.history.pushState(null, '', window.location.href);
+				historyStatePushedRef.current = true;
+				isActuallyLeavingRef.current = false;
+			} else {
+				// User confirmed, allow navigation
+				navigationBlockedRef.current = false;
+				historyStatePushedRef.current = false;
+				isActuallyLeavingRef.current = true;
+			}
+		};
+
+		// Add history state to enable back button detection (only once per blocking session)
+		if (!historyStatePushedRef.current) {
+			window.history.pushState(null, '', window.location.href);
+			historyStatePushedRef.current = true;
+		}
+
+		window.addEventListener('beforeunload', handleBeforeUnload);
+		window.addEventListener('pagehide', handlePageHide);
+		document.addEventListener('visibilitychange', handleVisibilityChange);
+		window.addEventListener('popstate', handlePopState);
+
+		return () => {
+			window.removeEventListener('beforeunload', handleBeforeUnload);
+			window.removeEventListener('pagehide', handlePageHide);
+			document.removeEventListener('visibilitychange', handleVisibilityChange);
+			window.removeEventListener('popstate', handlePopState);
+		};
+	}, [isConnected, transcriptHook.transcripts.length, ignoreDisconnect]);
 
 	// Update transcript hook when room changes and reset crisis detection
 	useEffect(() => {
@@ -246,8 +389,19 @@ function TherapyPageContent() {
 
 	// Cleanup on unmount - save transcripts and disconnect (only if not already saved)
 	// NOTE: This should NOT run if handleEndCall or disconnect useEffect already saved
+	// Also only runs if user actually confirmed leaving (not if they cancelled)
 	useEffect(() => {
 		return () => {
+			// Only cleanup if user actually confirmed leaving
+			// If user cancelled beforeunload, this cleanup shouldn't run (component shouldn't unmount)
+			// But add safety check anyway
+			if (!isActuallyLeavingRef.current && navigationBlockedRef.current) {
+				console.log(
+					'[TherapyPage] Cleanup prevented - user cancelled navigation, keeping session alive'
+				);
+				return; // Don't disconnect if user cancelled
+			}
+
 			// Check immediately if already saved - don't even process transcripts if already saved
 			if (hasSavedRef.current) {
 				console.log(
