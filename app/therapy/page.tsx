@@ -47,12 +47,9 @@ function TherapyPageContent() {
 	const [isSaving, setIsSaving] = useState(false);
 	const hasSavedRef = useRef(false); // Track if transcripts have been saved for this session
 	const [showPostMoodCheckIn, setShowPostMoodCheckIn] = useState(false);
-	const preSessionMoodRef = useRef<number | null>(null); // Track pre-session mood rating
-	const [initialRating, setInitialRating] = useState<number | undefined>(
-		undefined
-	);
 	const [lastSessionSummary, setLastSessionSummary] =
 		useState<SessionSummary | null>(null);
+	const sessionStartTimestampRef = useRef<number | null>(null); // Track session start time for consistent session ID
 
 	// Transcript management (initialize first)
 	const transcriptHook = useTranscripts();
@@ -62,12 +59,6 @@ function TherapyPageContent() {
 	useEffect(() => {
 		transcriptHookRef.current = transcriptHook;
 	}, [transcriptHook]);
-
-	useEffect(() => {
-		if (preSessionMoodRef.current != null) {
-			setInitialRating(preSessionMoodRef.current);
-		}
-	}, [showPostMoodCheckIn]);
 
 	// Crisis detection callback - memoized to avoid recreating
 	// Using ref to avoid dependency on transcriptHook
@@ -118,40 +109,8 @@ function TherapyPageContent() {
 
 			// Check for crisis keywords in user messages
 			checkForCrisis(message);
-
-			// Detect mood rating from user's response (1-10)
-			// Look for numbers in user messages, especially after agent asks about mood
-			if (
-				message.speaker === 'user' &&
-				message.isFinal &&
-				!preSessionMoodRef.current
-			) {
-				const text = message.text.trim();
-				// Look for a number between 1-10 in the user's response
-				const moodMatch = text.match(/\b([1-9]|10)\b/);
-				if (moodMatch) {
-					const moodRating = parseInt(moodMatch[1], 10);
-					if (moodRating >= 1 && moodRating <= 10) {
-						preSessionMoodRef.current = moodRating;
-						console.log(
-							`[TherapyPage] Detected pre-session mood rating: ${moodRating}`
-						);
-
-						// Save pre-session mood check-in
-						saveMoodCheckIn(userName, 'pre', {
-							rating: moodRating,
-							timestamp: message.timestamp,
-						}).catch((error) => {
-							console.error(
-								'[TherapyPage] Error saving pre-session mood:',
-								error
-							);
-						});
-					}
-				}
-			}
 		},
-		[checkForCrisis, userName, lastSessionSummary]
+		[checkForCrisis, lastSessionSummary]
 	);
 
 	const handleSummariesReceived = useCallback(
@@ -378,9 +337,14 @@ function TherapyPageContent() {
 	const handleJoin = useCallback(async () => {
 		if (!userName.trim()) return;
 
-		// Reset saved flag and mood tracking when starting a new session
+		// Reset saved flag when starting a new session
 		hasSavedRef.current = false;
-		preSessionMoodRef.current = null;
+
+		// Store session start timestamp to ensure all operations use the same session
+		sessionStartTimestampRef.current = Date.now();
+		console.log(
+			`[TherapyPage] Session started at timestamp: ${sessionStartTimestampRef.current}`
+		);
 
 		try {
 			// No longer need to load transcripts/summaries here
@@ -482,8 +446,10 @@ function TherapyPageContent() {
 	const handlePostMoodCheckInComplete = useCallback(
 		async (moodData: MoodCheckInData) => {
 			// Save post-session mood
+			// Use session start timestamp to ensure we use the same session ID
+			const sessionTimestamp = sessionStartTimestampRef.current || Date.now();
 			try {
-				await saveMoodCheckIn(userName, 'post', moodData);
+				await saveMoodCheckIn(userName, 'post', moodData, sessionTimestamp);
 				console.log(
 					`[TherapyPage] Saved post-session mood: ${moodData.rating}`
 				);
@@ -556,7 +522,6 @@ function TherapyPageContent() {
 					type='post'
 					onComplete={handlePostMoodCheckInComplete}
 					onSkip={handlePostMoodCheckInSkip}
-					initialRating={initialRating}
 				/>
 			)}
 

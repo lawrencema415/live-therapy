@@ -31,12 +31,12 @@ const CustomTooltip = ({ active, payload }: any) => {
 		const data = payload[0].payload;
 		return (
 			<div className='bg-slate-900/95 backdrop-blur-sm p-4 border border-slate-700 rounded-xl shadow-2xl min-w-[200px]'>
-				<p className='text-xs font-semibold text-slate-300 mb-3'>
+				{/* <p className='text-xs font-semibold text-slate-300 mb-3'>
 					{data.fullDate}
-				</p>
+				</p> */}
 
 				<div className='space-y-2.5'>
-					<div className='flex items-center justify-between gap-6'>
+					{/* <div className='flex items-center justify-between gap-6'>
 						<div className='flex items-center gap-2'>
 							<div className='w-3 h-3 rounded-full bg-indigo-400' />
 							<span className='text-xs text-slate-300'>Before</span>
@@ -60,7 +60,7 @@ const CustomTooltip = ({ active, payload }: any) => {
 								d='M19 14l-7 7m0 0l-7-7m7 7V3'
 							/>
 						</svg>
-					</div>
+					</div> */}
 
 					<div className='flex items-center justify-between gap-6'>
 						<div className='flex items-center gap-2'>
@@ -241,7 +241,7 @@ export function MoodTrendsChart({ trends }: MoodTrendsChartProps) {
 					})}
 
 					{/* Before dots */}
-					<Line
+					{/* <Line
 						type='monotone'
 						dataKey='before'
 						stroke='#6366f1'
@@ -250,7 +250,7 @@ export function MoodTrendsChart({ trends }: MoodTrendsChartProps) {
 						dot={{ fill: '#6366f1', r: 6, strokeWidth: 2, stroke: '#fff' }}
 						activeDot={{ r: 8, strokeWidth: 2, stroke: '#fff' }}
 						connectNulls={false}
-					/>
+					/> */}
 
 					{/* After dots */}
 					<Line

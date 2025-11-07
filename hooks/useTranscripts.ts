@@ -5,8 +5,8 @@ import type { TranscriptMessage, MessageBuffer } from '@/types/room';
 import { storeTranscriptsInStorage } from '@/utils/transcriptStorage';
 import type { Room } from 'livekit-client';
 
-const MERGE_TIME_WINDOW = 2000; // 2 seconds - messages within this time are merged
-const FINALIZE_DELAY = 2000; // 2 seconds - delay before finalizing merged messages
+const MERGE_TIME_WINDOW = 1000; // 1 seconds - messages within this time are merged
+const FINALIZE_DELAY = 1000; // 1 seconds - delay before finalizing merged messages
 
 export function useTranscripts() {
 	const [transcripts, setTranscripts] = useState<TranscriptMessage[]>([]);

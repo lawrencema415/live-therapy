@@ -35,8 +35,32 @@ export async function getOrCreateSession(sessionTimestamp: number = Date.now()):
 		// Create the session creation promise
 		const creationPromise = (async (): Promise<string | null> => {
 			try {
-				// Always create a new session for each therapy session
-				// This allows tracking multiple sessions per day separately
+				// First, check if a session already exists for this user within the same minute
+				// This prevents creating duplicate sessions when pre/post mood data is saved
+				const sessionDateStart = new Date(sessionTimestamp);
+				sessionDateStart.setSeconds(0, 0); // Round down to start of minute
+				const sessionDateEnd = new Date(sessionDateStart);
+				sessionDateEnd.setMinutes(sessionDateEnd.getMinutes() + 1); // End of minute
+				
+				const { data: existingSessions, error: selectError } = await supabase
+					.from('therapy_sessions')
+					.select('id')
+					.eq('user_id', user.id)
+					.gte('session_date', sessionDateStart.toISOString())
+					.lt('session_date', sessionDateEnd.toISOString())
+					.order('session_date', { ascending: false })
+					.limit(1);
+				
+				if (selectError) {
+					console.warn('[SupabaseDB] Error checking for existing session:', selectError);
+					// Continue to create new session
+				} else if (existingSessions && existingSessions.length > 0) {
+					// Use existing session
+					console.log(`[SupabaseDB] Found existing session: ${existingSessions[0].id} for timestamp ${sessionTimestamp}`);
+					return existingSessions[0].id;
+				}
+				
+				// No existing session found, create a new one
 				// Use the actual timestamp (not normalized to start of day) to ensure uniqueness
 				const actualSessionDate = new Date(sessionTimestamp);
 				
@@ -415,18 +439,46 @@ export async function saveMoodData(
 		}
 
 		if (existing) {
-			// Update existing
+			// Update existing - only update fields for the current type (pre or post)
+			// This preserves existing data for the other type
+			const updateFields: any = {
+				session_id: sessionId,
+				session_timestamp: sessionTimestamp,
+			};
+			
+			if (type === 'pre') {
+				updateFields.pre_session_rating = moodData.rating;
+				updateFields.pre_session_notes = moodData.notes || null;
+				updateFields.pre_session_timestamp = moodData.timestamp;
+			} else {
+				updateFields.post_session_rating = moodData.rating;
+				updateFields.post_session_notes = moodData.notes || null;
+				updateFields.post_session_timestamp = moodData.timestamp;
+			}
+			
 			const { error } = await supabase
 				.from('therapy_mood_data')
-				.update(moodDataUpdate)
+				.update(updateFields)
 				.eq('id', existing.id);
 
 			if (error) {
 				console.error('[SupabaseDB] Error updating mood data:', error);
 				return false;
 			}
+			
+			console.log(`[SupabaseDB] ✓ Updated ${type}-session mood data for existing record (id: ${existing.id}, session: ${sessionId})`);
 		} else {
-			// Insert new
+			// Insert new - set null values for the other type to ensure proper structure
+			if (type === 'pre') {
+				moodDataUpdate.post_session_rating = null;
+				moodDataUpdate.post_session_notes = null;
+				moodDataUpdate.post_session_timestamp = null;
+			} else {
+				moodDataUpdate.pre_session_rating = null;
+				moodDataUpdate.pre_session_notes = null;
+				moodDataUpdate.pre_session_timestamp = null;
+			}
+			
 			const { error } = await supabase
 				.from('therapy_mood_data')
 				.insert(moodDataUpdate);
@@ -435,9 +487,11 @@ export async function saveMoodData(
 				console.error('[SupabaseDB] Error inserting mood data:', error);
 				return false;
 			}
+			
+			console.log(`[SupabaseDB] ✓ Inserted new ${type}-session mood data record (session: ${sessionId})`);
 		}
 
-		console.log(`[SupabaseDB] ✓ Saved ${type}-session mood data`);
+		console.log(`[SupabaseDB] ✓ Saved ${type}-session mood data for session ${sessionId}`);
 		return true;
 	} catch (error) {
 		console.error('[SupabaseDB] Error in saveMoodData:', error);

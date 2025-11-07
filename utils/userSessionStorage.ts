@@ -6,7 +6,6 @@ import {
 	getOrCreateSession,
 	saveTranscripts as saveTranscriptsToDB,
 	loadRecentTranscripts,
-	loadTranscripts,
 	saveSummaries as saveSummariesToDB,
 	loadSummaries as loadSummariesFromDB,
 	saveMoodData as saveMoodDataToDB,
@@ -193,23 +192,38 @@ export async function loadSessionSummaries(userName: string, userId?: string): P
 
 /**
  * Save mood check-in data for a session to Supabase
+ * @param userName - User name (for logging)
+ * @param type - 'pre' or 'post' session mood check-in
+ * @param moodData - Mood check-in data (rating, notes, timestamp)
+ * @param sessionTimestamp - Optional session start timestamp to ensure same session ID is used
  */
 export async function saveMoodCheckIn(
 	userName: string,
 	type: 'pre' | 'post',
-	moodData: MoodCheckInData
+	moodData: MoodCheckInData,
+	sessionTimestamp?: number
 ): Promise<void> {
 	try {
-		// Get or create session
-		const sessionId = await getOrCreateSession();
+		// Get or create session using the provided timestamp (or current time if not provided)
+		// This ensures pre and post session mood data use the same session ID
+		const timestamp = sessionTimestamp || Date.now();
+		console.log(`[UserSession] Saving ${type}-session mood check-in for ${userName} with timestamp: ${timestamp} (${new Date(timestamp).toISOString()})`);
+		
+		const sessionId = await getOrCreateSession(timestamp);
 		if (!sessionId) {
 			console.error('[UserSession] Failed to get or create session for mood data');
 			return;
 		}
 
-		const sessionTimestamp = Date.now();
-		await saveMoodDataToDB(sessionId, sessionTimestamp, type, moodData);
-		console.log(`[UserSession] Saved ${type}-session mood check-in for ${userName}`);
+		console.log(`[UserSession] Using session ID: ${sessionId} for ${type}-session mood data`);
+		
+		// Use the same timestamp for the session (not Date.now() which might be different)
+		const success = await saveMoodDataToDB(sessionId, timestamp, type, moodData);
+		if (success) {
+			console.log(`[UserSession] ✓ Successfully saved ${type}-session mood check-in for ${userName} (session: ${sessionId}, rating: ${moodData.rating})`);
+		} else {
+			console.error(`[UserSession] ✗ Failed to save ${type}-session mood check-in for ${userName} (session: ${sessionId})`);
+		}
 	} catch (error) {
 		console.error('[UserSession] Error saving mood check-in:', error);
 	}
