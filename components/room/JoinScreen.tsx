@@ -1,4 +1,8 @@
+'use client';
+
 import Link from 'next/link';
+import { AlertCircle } from 'lucide-react';
+import { useMicrophonePermission } from '@/hooks/useMicrophonePermission';
 
 interface JoinScreenProps {
 	userName: string;
@@ -17,6 +21,8 @@ export function JoinScreen({
 	hasPreviousSession = false,
 	onLogout,
 }: JoinScreenProps) {
+	const { status, isBlocked, errorMessage } = useMicrophonePermission();
+
 	return (
 		<div className='min-h-screen flex items-center justify-center p-4 sm:p-6 therapy-background'>
 			<div className='bg-white rounded-3xl shadow-2xl p-8 sm:p-10 max-w-md w-full border border-slate-100'>
@@ -75,9 +81,34 @@ export function JoinScreen({
 						)}
 					</div>
 
+					{/* Microphone Permission Warning */}
+					{isBlocked && status !== 'checking' && (
+						<div className='bg-amber-50 border-2 border-amber-300 rounded-xl p-4 shadow-sm'>
+							<div className='flex items-start gap-3'>
+								<AlertCircle className='w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5' />
+								<div className='flex-1 min-w-0'>
+									<div className='text-sm font-bold text-amber-900 mb-1'>
+										Microphone Access Required
+									</div>
+									<div className='text-sm text-amber-800 leading-relaxed'>
+										{errorMessage || 'Microphone access is required to start a therapy session.'}
+									</div>
+									<div className='mt-2 text-xs text-amber-700'>
+										<p className='font-medium mb-1'>To enable microphone access:</p>
+										<ul className='list-disc list-inside space-y-0.5 ml-1'>
+											<li>Click the lock icon in your browser&apos;s address bar</li>
+											<li>Select &quot;Allow&quot; for microphone permissions</li>
+											<li>Refresh this page after enabling</li>
+										</ul>
+									</div>
+								</div>
+							</div>
+						</div>
+					)}
+
 					<button
 						onClick={onJoin}
-						disabled={isConnecting || !userName.trim()}
+						disabled={isConnecting || !userName.trim() || isBlocked}
 						className='cursor-pointer w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-2xl transition-all duration-200 flex items-center justify-center shadow-xl shadow-blue-500/25 hover:shadow-blue-500/40 disabled:shadow-none'
 					>
 						{isConnecting || isWaitingForAgent ? (
