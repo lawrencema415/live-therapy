@@ -95,7 +95,6 @@ export function TranscriptList({
 		// eslint-disable-next-line react-hooks/exhaustive-deps
 	}, []);
 
-	console.log('transcripts', transcripts);
 	return (
 		<div className='bg-white rounded-lg shadow-lg p-6'>
 			<h2 className='text-lg font-semibold text-gray-800 mb-4'>Conversation</h2>

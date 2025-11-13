@@ -1,7 +1,7 @@
 // Custom hook for managing LiveKit room connection
 
 import { useState, useRef, useCallback } from 'react';
-import { Room, RoomEvent, createLocalAudioTrack, ParticipantKind, LocalAudioTrack, RemoteParticipant } from 'livekit-client';
+import { Room, RoomEvent, createLocalAudioTrack, ParticipantKind, LocalAudioTrack, RemoteParticipant, LocalTrackPublication } from 'livekit-client';
 import type { TranscriptMessage, TextStreamReader, ParticipantIdentity } from '@/types/room';
 import { loadTranscriptsFromStorage } from '@/utils/transcriptStorage';
 import type { SessionSummary } from '@/utils/userSessionStorage';
@@ -24,6 +24,7 @@ export function useRoomConnection({
 	const [isMuted, setIsMuted] = useState(false);
 	const roomRef = useRef<Room | null>(null);
 	const micTrackRef = useRef<LocalAudioTrack | null>(null);
+	const micPublicationRef = useRef<LocalTrackPublication | null>(null);
 	const shouldAutoUnmuteRef = useRef(false);
 	const ignoreDisconnectRef = useRef(false); // Prevent disconnect event from updating state when user cancels navigation
 
@@ -159,10 +160,11 @@ export function useRoomConnection({
 			const mic = await createLocalAudioTrack();
 			micTrackRef.current = mic;
 			// Mute by default until agent connects
-			mic.mute();
+			const publication = await currentRoom.localParticipant.publishTrack(mic);
+			micPublicationRef.current = publication as LocalTrackPublication;
+			publication.mute();
 			setIsMuted(true);
 			shouldAutoUnmuteRef.current = true; // Flag to auto-unmute when agent connects
-			await currentRoom.localParticipant.publishTrack(mic);
 			console.log('Microphone track published (muted by default until agent connects)');
 
 			// Listen to remote audio tracks (agent voice)
@@ -230,8 +232,13 @@ export function useRoomConnection({
 						console.log('[RoomConnection] ✓ Agent detected in room');
 						
 						// Automatically unmute microphone when agent connects
-						if (micTrackRef.current && shouldAutoUnmuteRef.current) {
-							micTrackRef.current.unmute();
+						if (shouldAutoUnmuteRef.current) {
+							const publication = micPublicationRef.current;
+							if (publication) {
+								publication.unmute();
+							} else if (micTrackRef.current) {
+								micTrackRef.current.unmute();
+							}
 							setIsMuted(false);
 							shouldAutoUnmuteRef.current = false; // Clear flag after unmuting
 							console.log('[RoomConnection] Microphone unmuted automatically - agent connected');
@@ -338,14 +345,23 @@ export function useRoomConnection({
 	}, [onTranscriptsUpdate, onTranscriptReceived, onSummariesReceived]);
 
 	const toggleMute = useCallback(() => {
-		if (micTrackRef.current) {
+		const publication = micPublicationRef.current;
+		if (publication || micTrackRef.current) {
 			if (isMuted) {
-				micTrackRef.current.unmute();
+				if (publication) {
+					publication.unmute();
+				} else {
+					micTrackRef.current?.unmute();
+				}
 				setIsMuted(false);
 				shouldAutoUnmuteRef.current = false; // User manually unmuted, don't auto-unmute
 				console.log('[RoomConnection] Microphone unmuted');
 			} else {
-				micTrackRef.current.mute();
+				if (publication) {
+					publication.mute();
+				} else {
+					micTrackRef.current?.mute();
+				}
 				setIsMuted(true);
 				console.log('[RoomConnection] Microphone muted');
 			}
@@ -354,8 +370,13 @@ export function useRoomConnection({
 
 	// Force mute microphone (used when modal opens)
 	const muteMicrophone = useCallback(() => {
-		if (micTrackRef.current && !isMuted) {
-			micTrackRef.current.mute();
+		const publication = micPublicationRef.current;
+		if (!isMuted) {
+			if (publication) {
+				publication.mute();
+			} else {
+				micTrackRef.current?.mute();
+			}
 			setIsMuted(true);
 			console.log('[RoomConnection] Microphone force muted');
 		}
@@ -372,7 +393,8 @@ export function useRoomConnection({
 	}, []);
 
 	const disconnect = useCallback(async () => {
-		if (roomRef.current) {
+		const currentRoom = roomRef.current;
+		if (currentRoom) {
 			try {
 				console.log('[RoomConnection] Disconnecting from room and ending agent session...');
 				
@@ -381,11 +403,13 @@ export function useRoomConnection({
 					micTrackRef.current.stop();
 					micTrackRef.current = null;
 				}
+				micPublicationRef.current = null;
 				shouldAutoUnmuteRef.current = false;
 				
+				currentRoom.removeAllListeners?.();
 				// Disconnect from room - this will trigger agent job to end
 				// When all participants leave, the agent job ends automatically
-				await roomRef.current.disconnect();
+				await currentRoom.disconnect();
 				console.log('[RoomConnection] Successfully disconnected from room');
 				
 				// Give a moment for cleanup

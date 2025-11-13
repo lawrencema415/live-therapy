@@ -74,11 +74,6 @@ export function useTranscripts() {
 					const finalOnly = updated.filter(m => m.isFinal);
 					allTranscriptsRef.current = finalOnly;
 					
-					// Log agent message count for debugging
-					const agentCount = finalOnly.filter(t => t.speaker === 'agent').length;
-					const userCount = finalOnly.filter(t => t.speaker === 'user').length;
-					console.log(`[Transcripts] After finalizing ${speaker} - Total final: ${finalOnly.length}, Agent: ${agentCount}, User: ${userCount}`);
-
 				// Store transcripts in participant attributes
 				storeTranscriptsInStorage(roomRef.current, finalOnly);
 
@@ -99,17 +94,8 @@ export function useTranscripts() {
 	const addTranscript = useCallback(
 		(message: TranscriptMessage) => {
 			// Log ALL transcripts (including agent) for debugging
-			console.log(
-				`[Transcripts] Adding transcript - Speaker: ${message.speaker}, Final: ${message.isFinal}, Text: "${message.text.substring(0, 50)}${
-					message.text.length > 50 ? '...' : ''
-				}"`
-			);
 
 			if (message.isFinal) {
-				console.log(
-					`[Transcripts] Final transcript received - Speaker: ${message.speaker}`
-				);
-
 				const interimAggregate = interimMessagesRef.current.get(message.id);
 				const rawFinalText = message.text.trim();
 				const fallbackText = interimAggregate?.text?.trim() ?? '';
@@ -127,9 +113,6 @@ export function useTranscripts() {
 
 				// Skip empty final messages (could happen if speech was interrupted very early)
 				if (!finalMessage.text.trim()) {
-					console.log(
-						`[Transcripts] Skipping empty final transcript for ${message.speaker}`
-					);
 					return;
 				}
 
@@ -191,7 +174,6 @@ export function useTranscripts() {
 					console.log(`[Merge] Started new buffer for ${bufferKey}`);
 				}
 			} else {
-				console.log('Interim transcript:', message);
 				const existingAggregate = interimMessagesRef.current.get(message.id);
 				const incomingText = message.text;
 				const normalizedIncoming = incomingText
@@ -263,10 +245,6 @@ export function useTranscripts() {
 		
 		const deduplicated = Array.from(seen.values()).sort((a, b) => a.timestamp - b.timestamp);
 		
-		if (deduplicated.length !== newTranscripts.length) {
-			console.log(`[Transcripts] Deduplicated transcripts: ${newTranscripts.length} -> ${deduplicated.length}`);
-		}
-		
 		setTranscripts(deduplicated);
 		allTranscriptsRef.current = deduplicated.filter(m => m.isFinal); // Keep ref in sync with final only
 	}, []);
@@ -297,7 +275,6 @@ export function useTranscripts() {
 	 * Returns the current transcripts after finalization (for immediate access)
 	 */
 	const finalizeAllBuffers = useCallback(() => {
-		console.log('[Transcripts] Finalizing all pending message buffers...');
 		const buffersToFinalize: Array<{ speaker: string; count: number }> = [];
 		
 		// Collect all buffered messages first
@@ -310,7 +287,6 @@ export function useTranscripts() {
 			if (buffer.messages.length > 0) {
 				buffersToFinalize.push({ speaker, count: buffer.messages.length });
 				allBufferedMessages.push({ speaker, messages: [...buffer.messages] });
-				console.log(`[Transcripts] Finalizing ${buffer.messages.length} buffered messages for ${speaker}`);
 			}
 		}
 		
@@ -350,14 +326,6 @@ export function useTranscripts() {
 			const updated = [...filtered, ...newFinalized].sort((a, b) => a.timestamp - b.timestamp);
 			
 			allTranscriptsRef.current = updated;
-			
-			console.log(`[Transcripts] Updated ref - Total: ${updated.length}, Agent: ${updated.filter(t => t.speaker === 'agent').length}, User: ${updated.filter(t => t.speaker === 'user').length}`);
-		}
-		
-		if (buffersToFinalize.length > 0) {
-			console.log(`[Transcripts] Finalized ${buffersToFinalize.length} buffers:`, buffersToFinalize.map(b => `${b.speaker}(${b.count})`).join(', '));
-		} else {
-			console.log('[Transcripts] No buffers to finalize');
 		}
 		
 		// Return current transcripts from ref (synchronously accessible, now with buffered messages)
@@ -395,11 +363,7 @@ export function useTranscripts() {
 		
 		// Update ref with combined result
 		allTranscriptsRef.current = result;
-		
-		const agentCount = result.filter(t => t.speaker === 'agent').length;
-		const userCount = result.filter(t => t.speaker === 'user').length;
-		console.log(`[Transcripts] getAllTranscripts - Total: ${result.length}, Agent: ${agentCount}, User: ${userCount}`);
-		
+
 		return result;
 	}, [finalizeAllBuffers]);
 
