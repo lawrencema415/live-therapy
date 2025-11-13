@@ -2,7 +2,7 @@
 
 import { useState, useRef, useCallback } from 'react';
 import { Room, RoomEvent, createLocalAudioTrack, ParticipantKind, LocalAudioTrack, RemoteParticipant } from 'livekit-client';
-import type { TranscriptMessage, TextStreamReader, ParticipantIdentity, StoredTranscript } from '@/types/room';
+import type { TranscriptMessage, TextStreamReader, ParticipantIdentity } from '@/types/room';
 import { loadTranscriptsFromStorage } from '@/utils/transcriptStorage';
 import type { SessionSummary } from '@/utils/userSessionStorage';
 
@@ -509,10 +509,8 @@ function setupTranscriptHandlers(
 				participantInfo: ParticipantIdentity | string
 			) => {
 				const info = reader.info;
-				const isFinal =
-					info.attributes['lk.transcription_final'] === 'true';
 				const segmentId = info.attributes['lk.segment_id'] || info.id;
-				
+
 				// Determine speaker identity
 				let speakerIdentity: string;
 				if (typeof participantInfo === 'string') {
@@ -520,58 +518,92 @@ function setupTranscriptHandlers(
 				} else {
 					speakerIdentity = participantInfo?.identity || 'unknown';
 				}
-				
+
 				// Determine if this is from the agent
 				let speaker: string;
-				if (speakerIdentity === localParticipantIdentity || speakerIdentity === 'user') {
-					// This is from the local participant (user)
+				if (
+					speakerIdentity === localParticipantIdentity ||
+					speakerIdentity === 'user'
+				) {
 					speaker = 'user';
 				} else if (identifyAgent(speakerIdentity)) {
-					// This is from the agent
 					speaker = 'agent';
 				} else {
-					// If we don't know, but it's not the user, assume it's the agent
-					// This is critical - agent messages might come through with unknown identity
-					if (speakerIdentity !== localParticipantIdentity && speakerIdentity !== 'unknown' && speakerIdentity.trim() !== '') {
+					if (
+						speakerIdentity !== localParticipantIdentity &&
+						speakerIdentity !== 'unknown' &&
+						speakerIdentity.trim() !== ''
+					) {
 						speaker = 'agent';
-						// Store it for future reference
 						if (!agentParticipantIdentity) {
 							agentParticipantIdentity = speakerIdentity;
-							console.log(`[RoomConnection] ✓ Assumed agent from unknown identity: ${speakerIdentity}`);
+							console.log(
+								`[RoomConnection] ✓ Assumed agent from unknown identity: ${speakerIdentity}`
+							);
 						}
 					} else {
-						// Default: use identity as-is (but log it)
 						speaker = speakerIdentity;
-						console.warn(`[RoomConnection] ⚠️ Unknown speaker identity: ${speakerIdentity}, using as-is`);
+						console.warn(
+							`[RoomConnection] ⚠️ Unknown speaker identity: ${speakerIdentity}, using as-is`
+						);
 					}
 				}
 
-				try {
-					const text = await reader.readAll();
+				const streamStartTimestamp = Date.now();
+				let aggregatedText = '';
 
-					if (!text.trim()) {
+				const emitTranscript = (
+					text: string,
+					isFinal: boolean,
+					timestampOverride?: number
+				) => {
+					const trimmed = text.trim();
+					if (!trimmed) {
 						return;
 					}
 
 					const message: TranscriptMessage = {
 						id: segmentId,
 						speaker,
-						text: text.trim(),
+						text: trimmed,
 						isFinal,
-						timestamp: Date.now(),
+						timestamp: timestampOverride ?? Date.now(),
 					};
 
-					// Enhanced logging for agent messages
 					if (speaker === 'agent') {
-						console.log(`[RoomConnection] 🎯 AGENT TRANSCRIPT - Speaker: ${speaker}, Identity: ${speakerIdentity}, Text: "${text.substring(0, 80)}${text.length > 80 ? '...' : ''}", Final: ${isFinal}`);
+						console.log(
+							`[RoomConnection] 🎯 AGENT TRANSCRIPT - Speaker: ${speaker}, Identity: ${speakerIdentity}, Text: "${trimmed.substring(0, 80)}${
+								trimmed.length > 80 ? '...' : ''
+							}", Final: ${isFinal}`
+						);
 					} else {
-						console.log(`[RoomConnection] Received transcript - Speaker: ${speaker} (identity: ${speakerIdentity}), Text: "${text.substring(0, 50)}${text.length > 50 ? '...' : ''}", Final: ${isFinal}`);
+						console.log(
+							`[RoomConnection] Received transcript - Speaker: ${speaker} (identity: ${speakerIdentity}), Text: "${trimmed.substring(0, 50)}${
+								trimmed.length > 50 ? '...' : ''
+							}", Final: ${isFinal}`
+						);
 					}
-					
+
 					onTranscriptReceived(message);
-				} catch (err) {
-					console.error('Error reading transcription stream:', err);
-				}
+				};
+
+				const processStream = async () => {
+					try {
+						for await (const chunk of (reader as unknown as AsyncIterable<string>)) {
+							if (!chunk) continue;
+							aggregatedText += chunk;
+							emitTranscript(aggregatedText, false, streamStartTimestamp);
+						}
+
+						emitTranscript(aggregatedText, true, streamStartTimestamp);
+					} catch (err) {
+						console.error('Error reading transcription stream:', err);
+					}
+				};
+
+				processStream().catch((err) =>
+					console.error('Failed to process transcription stream:', err)
+				);
 			}
 		);
 		console.log('Text stream handler registered successfully');

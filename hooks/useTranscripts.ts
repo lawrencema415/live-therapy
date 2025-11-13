@@ -98,24 +98,70 @@ export function useTranscripts() {
 	 */
 	const addTranscript = useCallback(
 		(message: TranscriptMessage) => {
-			// Log ALL transcripts (including agent) for debugging
-			console.log(`[Transcripts] Adding transcript - Speaker: ${message.speaker}, Final: ${message.isFinal}, Text: "${message.text.substring(0, 50)}${message.text.length > 50 ? '...' : ''}"`);
-			
-			if (message.isFinal) {
-				console.log(`[Transcripts] Final transcript received - Speaker: ${message.speaker}`);
+			const mergeTextSegments = (existing: string, incoming: string): string => {
+				if (!existing) return incoming;
+				if (!incoming) return existing;
+				if (incoming === existing) return existing;
+				if (incoming.toLowerCase().startsWith(existing.toLowerCase())) {
+					return incoming;
+				}
+				if (existing.toLowerCase().endsWith(incoming.toLowerCase())) {
+					return existing;
+				}
+				if (incoming.toLowerCase().includes(existing.toLowerCase())) {
+					return incoming;
+				}
+				if (existing.endsWith(' ') && incoming.startsWith(' ')) {
+					return existing + incoming.slice(1);
+				}
+				const needsSpace = !existing.endsWith(' ') && !incoming.startsWith(' ');
+				return existing + (needsSpace ? ' ' : '') + incoming;
+			};
 
-				// Remove interim message if exists
+			// Log ALL transcripts (including agent) for debugging
+			console.log(
+				`[Transcripts] Adding transcript - Speaker: ${message.speaker}, Final: ${message.isFinal}, Text: "${message.text.substring(0, 50)}${
+					message.text.length > 50 ? '...' : ''
+				}"`
+			);
+
+			if (message.isFinal) {
+				console.log(
+					`[Transcripts] Final transcript received - Speaker: ${message.speaker}`
+				);
+
+				const interimAggregate = interimMessagesRef.current.get(message.id);
+				const rawFinalText = message.text.trim();
+				const fallbackText = interimAggregate?.text?.trim() ?? '';
+				const finalText = rawFinalText || fallbackText;
+
+				const finalMessage: TranscriptMessage = {
+					...message,
+					text: finalText,
+					timestamp: interimAggregate?.timestamp ?? message.timestamp,
+					isFinal: true,
+				};
+
+				// Remove interim aggregate (no longer needed)
 				interimMessagesRef.current.delete(message.id);
+
+				// Skip empty final messages (could happen if speech was interrupted very early)
+				if (!finalMessage.text.trim()) {
+					console.log(
+						`[Transcripts] Skipping empty final transcript for ${message.speaker}`
+					);
+					return;
+				}
 
 				// Smart merging: buffer messages from same speaker within time window
 				const now = Date.now();
-				const bufferKey = message.speaker;
+				const bufferKey = finalMessage.speaker;
 				let buffer = messageBufferRef.current.get(bufferKey);
 
 				// Check if we should merge with recent messages
 				if (buffer && now - buffer.lastUpdate < MERGE_TIME_WINDOW) {
 					// Add to existing buffer
-					buffer.messages.push(message);
+					buffer.messages.push(finalMessage);
 					buffer.lastUpdate = now;
 
 					// Clear existing timeout
@@ -140,7 +186,7 @@ export function useTranscripts() {
 
 					// Create new buffer
 					buffer = {
-						messages: [message],
+						messages: [finalMessage],
 						lastUpdate: now,
 						timeoutId: setTimeout(() => {
 							finalizeMergedMessages(bufferKey);
@@ -151,6 +197,18 @@ export function useTranscripts() {
 				}
 			} else {
 				console.log('Interim transcript:', message);
+				const existingAggregate = interimMessagesRef.current.get(message.id);
+				const aggregatedText = mergeTextSegments(
+					existingAggregate?.text ?? '',
+					message.text
+				);
+				const aggregatedMessage: TranscriptMessage = {
+					...message,
+					text: aggregatedText,
+					timestamp: existingAggregate?.timestamp ?? message.timestamp,
+					isFinal: false,
+				};
+
 				// Interim transcript - update in place or add if new
 				setTranscripts((prev) => {
 					// Find existing interim message with the same segment ID
@@ -162,10 +220,10 @@ export function useTranscripts() {
 					if (existingIndex >= 0) {
 						// Update existing interim message
 						updated = [...prev];
-						updated[existingIndex] = message;
+						updated[existingIndex] = aggregatedMessage;
 					} else {
 						// Add new interim message at the end
-						updated = [...prev, message];
+						updated = [...prev, aggregatedMessage];
 					}
 					
 					// Update ref for final messages only (interim messages shouldn't be saved)
@@ -178,8 +236,8 @@ export function useTranscripts() {
 					return updated;
 				});
 
-				// Track interim message
-				interimMessagesRef.current.set(message.id, message);
+				// Track interim aggregate
+				interimMessagesRef.current.set(message.id, aggregatedMessage);
 			}
 		},
 		[finalizeMergedMessages]

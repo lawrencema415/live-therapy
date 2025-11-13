@@ -85,19 +85,26 @@ export function JoinScreen({
 					{isBlocked && status !== 'checking' && (
 						<div className='bg-amber-50 border-2 border-amber-300 rounded-xl p-4 shadow-sm'>
 							<div className='flex items-start gap-3'>
-								<AlertCircle className='w-5 h-5 text-amber-600 flex-shrink-0 mt-0.5' />
+								<AlertCircle className='w-5 h-5 text-amber-600 shrink-0 mt-0.5' />
 								<div className='flex-1 min-w-0'>
 									<div className='text-sm font-bold text-amber-900 mb-1'>
 										Microphone Access Required
 									</div>
 									<div className='text-sm text-amber-800 leading-relaxed'>
-										{errorMessage || 'Microphone access is required to start a therapy session.'}
+										{errorMessage ||
+											'Microphone access is required to start a therapy session.'}
 									</div>
 									<div className='mt-2 text-xs text-amber-700'>
-										<p className='font-medium mb-1'>To enable microphone access:</p>
+										<p className='font-medium mb-1'>
+											To enable microphone access:
+										</p>
 										<ul className='list-disc list-inside space-y-0.5 ml-1'>
-											<li>Click the lock icon in your browser&apos;s address bar</li>
-											<li>Select &quot;Allow&quot; for microphone permissions</li>
+											<li>
+												Click the lock icon in your browser&apos;s address bar
+											</li>
+											<li>
+												Select &quot;Allow&quot; for microphone permissions
+											</li>
 											<li>Refresh this page after enabling</li>
 										</ul>
 									</div>
