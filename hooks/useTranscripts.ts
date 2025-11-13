@@ -98,26 +98,6 @@ export function useTranscripts() {
 	 */
 	const addTranscript = useCallback(
 		(message: TranscriptMessage) => {
-			const mergeTextSegments = (existing: string, incoming: string): string => {
-				if (!existing) return incoming;
-				if (!incoming) return existing;
-				if (incoming === existing) return existing;
-				if (incoming.toLowerCase().startsWith(existing.toLowerCase())) {
-					return incoming;
-				}
-				if (existing.toLowerCase().endsWith(incoming.toLowerCase())) {
-					return existing;
-				}
-				if (incoming.toLowerCase().includes(existing.toLowerCase())) {
-					return incoming;
-				}
-				if (existing.endsWith(' ') && incoming.startsWith(' ')) {
-					return existing + incoming.slice(1);
-				}
-				const needsSpace = !existing.endsWith(' ') && !incoming.startsWith(' ');
-				return existing + (needsSpace ? ' ' : '') + incoming;
-			};
-
 			// Log ALL transcripts (including agent) for debugging
 			console.log(
 				`[Transcripts] Adding transcript - Speaker: ${message.speaker}, Final: ${message.isFinal}, Text: "${message.text.substring(0, 50)}${
@@ -198,33 +178,19 @@ export function useTranscripts() {
 			} else {
 				console.log('Interim transcript:', message);
 				const existingAggregate = interimMessagesRef.current.get(message.id);
-				const aggregatedText = mergeTextSegments(
-					existingAggregate?.text ?? '',
-					message.text
-				);
 				const aggregatedMessage: TranscriptMessage = {
 					...message,
-					text: aggregatedText,
+					text: message.text,
 					timestamp: existingAggregate?.timestamp ?? message.timestamp,
 					isFinal: false,
 				};
 
-				// Interim transcript - update in place or add if new
+				// Interim transcript - always keep the stream message at the end
 				setTranscripts((prev) => {
-					// Find existing interim message with the same segment ID
-					const existingIndex = prev.findIndex(
-						(msg) => msg.id === message.id && !msg.isFinal
+					const withoutCurrent = prev.filter(
+						(msg) => !(msg.id === message.id && !msg.isFinal)
 					);
-
-					let updated: TranscriptMessage[];
-					if (existingIndex >= 0) {
-						// Update existing interim message
-						updated = [...prev];
-						updated[existingIndex] = aggregatedMessage;
-					} else {
-						// Add new interim message at the end
-						updated = [...prev, aggregatedMessage];
-					}
+					const updated = [...withoutCurrent, aggregatedMessage];
 					
 					// Update ref for final messages only (interim messages shouldn't be saved)
 					// Only update ref if we have final messages in the updated array
