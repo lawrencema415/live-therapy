@@ -133,6 +133,21 @@ export function useTranscripts() {
 					return;
 				}
 
+				if (message.speaker === 'user') {
+					setTranscripts((prev) => {
+						const withoutCurrent = prev.filter((msg) => msg.id !== message.id);
+						const updated = [...withoutCurrent, finalMessage];
+						updated.sort((a, b) => a.timestamp - b.timestamp);
+
+						const finalOnly = updated.filter((m) => m.isFinal);
+						allTranscriptsRef.current = finalOnly;
+						storeTranscriptsInStorage(roomRef.current, finalOnly);
+
+						return updated;
+					});
+					return;
+				}
+
 				// Smart merging: buffer messages from same speaker within time window
 				const now = Date.now();
 				const bufferKey = finalMessage.speaker;
@@ -178,9 +193,28 @@ export function useTranscripts() {
 			} else {
 				console.log('Interim transcript:', message);
 				const existingAggregate = interimMessagesRef.current.get(message.id);
+				const incomingText = message.text;
+				const normalizedIncoming = incomingText
+					.replace(/\s+/g, ' ')
+					.trim();
+				const existingText = existingAggregate?.text ?? '';
+				const normalizedExisting = existingText
+					.replace(/\s+/g, ' ')
+					.trim();
+
+				let textToStore: string;
+				if (!normalizedExisting) {
+					textToStore = normalizedIncoming;
+				} else if (normalizedIncoming.startsWith(normalizedExisting)) {
+					textToStore = normalizedIncoming;
+				} else if (normalizedExisting.startsWith(normalizedIncoming)) {
+					textToStore = normalizedExisting;
+				} else {
+					textToStore = normalizedIncoming;
+				}
 				const aggregatedMessage: TranscriptMessage = {
 					...message,
-					text: message.text,
+					text: textToStore,
 					timestamp: existingAggregate?.timestamp ?? message.timestamp,
 					isFinal: false,
 				};
