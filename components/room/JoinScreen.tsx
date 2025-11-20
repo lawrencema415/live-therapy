@@ -156,12 +156,18 @@ export function JoinScreen({
 						</p>
 					)}
 
-					<div>
+					<div className='grid grid-cols-2 gap-3'>
 						<Link
 							href='/dashboard'
 							className='block w-full text-center text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-medium py-3 px-4 rounded-xl transition-all border border-blue-200 hover:border-blue-300'
 						>
 							Dashboard
+						</Link>
+						<Link
+							href='/journal'
+							className='block w-full text-center text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-medium py-3 px-4 rounded-xl transition-all border border-blue-200 hover:border-blue-300'
+						>
+							Journal
 						</Link>
 					</div>
 				</div>

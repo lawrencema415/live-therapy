@@ -582,3 +582,284 @@ export async function getUserSessions() {
 	}
 }
 
+/**
+ * Journal Entry Types
+ */
+export interface JournalEntry {
+	id: string;
+	user_id: string;
+	title: string;
+	content: string;
+	images: string[]; // Array of image URLs
+	created_at: string;
+	updated_at: string;
+}
+
+export interface CreateJournalEntryInput {
+	title: string;
+	content: string;
+	images?: string[];
+}
+
+export interface UpdateJournalEntryInput {
+	title?: string;
+	content?: string;
+	images?: string[];
+}
+
+/**
+ * Create a new journal entry
+ */
+export async function createJournalEntry(
+	input: CreateJournalEntryInput
+): Promise<JournalEntry | null> {
+	try {
+		const supabase = createClient();
+		const { data: { user } } = await supabase.auth.getUser();
+		if (!user) {
+			console.warn('[SupabaseDB] No authenticated user found for journal entry');
+			return null;
+		}
+
+		const { data, error } = await supabase
+			.from('journal_entries')
+			.insert({
+				user_id: user.id,
+				title: input.title,
+				content: input.content,
+				images: input.images || [],
+			})
+			.select()
+			.single();
+
+		if (error) {
+			console.error('[SupabaseDB] Error creating journal entry:', error);
+			return null;
+		}
+
+		console.log('[SupabaseDB] ✓ Created journal entry:', data.id);
+		return data;
+	} catch (error) {
+		console.error('[SupabaseDB] Error in createJournalEntry:', error);
+		return null;
+	}
+}
+
+/**
+ * Update an existing journal entry
+ */
+export async function updateJournalEntry(
+	id: string,
+	input: UpdateJournalEntryInput
+): Promise<JournalEntry | null> {
+	try {
+		const supabase = createClient();
+		const { data: { user } } = await supabase.auth.getUser();
+		if (!user) {
+			console.warn('[SupabaseDB] No authenticated user found for journal update');
+			return null;
+		}
+
+		const updateData: any = {
+			updated_at: new Date().toISOString(),
+		};
+
+		if (input.title !== undefined) updateData.title = input.title;
+		if (input.content !== undefined) updateData.content = input.content;
+		if (input.images !== undefined) updateData.images = input.images;
+
+		const { data, error } = await supabase
+			.from('journal_entries')
+			.update(updateData)
+			.eq('id', id)
+			.eq('user_id', user.id) // Ensure user owns this entry
+			.select()
+			.single();
+
+		if (error) {
+			console.error('[SupabaseDB] Error updating journal entry:', error);
+			return null;
+		}
+
+		console.log('[SupabaseDB] ✓ Updated journal entry:', id);
+		return data;
+	} catch (error) {
+		console.error('[SupabaseDB] Error in updateJournalEntry:', error);
+		return null;
+	}
+}
+
+/**
+ * Delete a journal entry
+ */
+export async function deleteJournalEntry(id: string): Promise<boolean> {
+	try {
+		const supabase = createClient();
+		const { data: { user } } = await supabase.auth.getUser();
+		if (!user) {
+			console.warn('[SupabaseDB] No authenticated user found for journal delete');
+			return false;
+		}
+
+		const { error } = await supabase
+			.from('journal_entries')
+			.delete()
+			.eq('id', id)
+			.eq('user_id', user.id); // Ensure user owns this entry
+
+		if (error) {
+			console.error('[SupabaseDB] Error deleting journal entry:', error);
+			return false;
+		}
+
+		console.log('[SupabaseDB] ✓ Deleted journal entry:', id);
+		return true;
+	} catch (error) {
+		console.error('[SupabaseDB] Error in deleteJournalEntry:', error);
+		return false;
+	}
+}
+
+/**
+ * Get all journal entries for the current user
+ */
+export async function getJournalEntries(
+	limit?: number
+): Promise<JournalEntry[]> {
+	try {
+		const supabase = createClient();
+		const { data: { user } } = await supabase.auth.getUser();
+		if (!user) return [];
+
+		let query = supabase
+			.from('journal_entries')
+			.select('*')
+			.eq('user_id', user.id)
+			.order('created_at', { ascending: false });
+
+		if (limit) {
+			query = query.limit(limit);
+		}
+
+		const { data, error } = await query;
+
+		if (error) {
+			console.error('[SupabaseDB] Error loading journal entries:', error);
+			return [];
+		}
+
+		return data || [];
+	} catch (error) {
+		console.error('[SupabaseDB] Error in getJournalEntries:', error);
+		return [];
+	}
+}
+
+/**
+ * Get a single journal entry by ID
+ */
+export async function getJournalEntry(id: string): Promise<JournalEntry | null> {
+	try {
+		const supabase = createClient();
+		const { data: { user } } = await supabase.auth.getUser();
+		if (!user) return null;
+
+		const { data, error } = await supabase
+			.from('journal_entries')
+			.select('*')
+			.eq('id', id)
+			.eq('user_id', user.id) // Ensure user owns this entry
+			.single();
+
+		if (error) {
+			console.error('[SupabaseDB] Error loading journal entry:', error);
+			return null;
+		}
+
+		return data;
+	} catch (error) {
+		console.error('[SupabaseDB] Error in getJournalEntry:', error);
+		return null;
+	}
+}
+
+/**
+ * Upload an image to Supabase Storage for journal entries
+ */
+export async function uploadJournalImage(
+	file: File,
+	entryId?: string
+): Promise<string | null> {
+	try {
+		const supabase = createClient();
+		const { data: { user } } = await supabase.auth.getUser();
+		if (!user) {
+			console.warn('[SupabaseDB] No authenticated user for image upload');
+			return null;
+		}
+
+		// Generate unique filename
+		const fileExt = file.name.split('.').pop();
+		const fileName = entryId
+			? `${user.id}/${entryId}/${Date.now()}.${fileExt}`
+			: `${user.id}/temp/${Date.now()}.${fileExt}`;
+
+		// Upload file
+		const { error: uploadError } = await supabase.storage
+			.from('journal-images')
+			.upload(fileName, file, {
+				cacheControl: '3600',
+				upsert: false,
+			});
+
+		if (uploadError) {
+			console.error('[SupabaseDB] Error uploading image:', uploadError);
+			return null;
+		}
+
+		// Get public URL
+		const {
+			data: { publicUrl },
+		} = supabase.storage.from('journal-images').getPublicUrl(fileName);
+
+		console.log('[SupabaseDB] ✓ Uploaded journal image:', publicUrl);
+		return publicUrl;
+	} catch (error) {
+		console.error('[SupabaseDB] Error in uploadJournalImage:', error);
+		return null;
+	}
+}
+
+/**
+ * Delete an image from Supabase Storage
+ */
+export async function deleteJournalImage(imageUrl: string): Promise<boolean> {
+	try {
+		const supabase = createClient();
+		// Extract file path from URL
+		// URL format: https://[project].supabase.co/storage/v1/object/public/journal-images/[path]
+		const urlParts = imageUrl.split('/journal-images/');
+		if (urlParts.length < 2) {
+			console.warn('[SupabaseDB] Invalid image URL format');
+			return false;
+		}
+
+		const fileName = urlParts[1].split('?')[0]; // Remove query params
+
+		const { error } = await supabase.storage
+			.from('journal-images')
+			.remove([fileName]);
+
+		if (error) {
+			console.error('[SupabaseDB] Error deleting image:', error);
+			return false;
+		}
+
+		console.log('[SupabaseDB] ✓ Deleted journal image:', fileName);
+		return true;
+	} catch (error) {
+		console.error('[SupabaseDB] Error in deleteJournalImage:', error);
+		return false;
+	}
+}
+

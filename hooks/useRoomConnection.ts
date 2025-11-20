@@ -1,7 +1,7 @@
 // Custom hook for managing LiveKit room connection
 
 import { useState, useRef, useCallback } from 'react';
-import { Room, RoomEvent, createLocalAudioTrack, ParticipantKind, LocalAudioTrack, RemoteParticipant, LocalTrackPublication } from 'livekit-client';
+import { Room, RoomEvent, createLocalAudioTrack, ParticipantKind, LocalAudioTrack, RemoteParticipant } from 'livekit-client';
 import type { TranscriptMessage, TextStreamReader, ParticipantIdentity } from '@/types/room';
 import { loadTranscriptsFromStorage } from '@/utils/transcriptStorage';
 import type { SessionSummary } from '@/utils/userSessionStorage';
@@ -24,7 +24,6 @@ export function useRoomConnection({
 	const [isMuted, setIsMuted] = useState(false);
 	const roomRef = useRef<Room | null>(null);
 	const micTrackRef = useRef<LocalAudioTrack | null>(null);
-	const micPublicationRef = useRef<LocalTrackPublication | null>(null);
 	const shouldAutoUnmuteRef = useRef(false);
 	const ignoreDisconnectRef = useRef(false); // Prevent disconnect event from updating state when user cancels navigation
 
@@ -160,11 +159,10 @@ export function useRoomConnection({
 			const mic = await createLocalAudioTrack();
 			micTrackRef.current = mic;
 			// Mute by default until agent connects
-			const publication = await currentRoom.localParticipant.publishTrack(mic);
-			micPublicationRef.current = publication as LocalTrackPublication;
-			publication.mute();
+			mic.mute();
 			setIsMuted(true);
 			shouldAutoUnmuteRef.current = true; // Flag to auto-unmute when agent connects
+			await currentRoom.localParticipant.publishTrack(mic);
 			console.log('Microphone track published (muted by default until agent connects)');
 
 			// Listen to remote audio tracks (agent voice)
@@ -232,13 +230,8 @@ export function useRoomConnection({
 						console.log('[RoomConnection] ✓ Agent detected in room');
 						
 						// Automatically unmute microphone when agent connects
-						if (shouldAutoUnmuteRef.current) {
-							const publication = micPublicationRef.current;
-							if (publication) {
-								publication.unmute();
-							} else if (micTrackRef.current) {
-								micTrackRef.current.unmute();
-							}
+						if (micTrackRef.current && shouldAutoUnmuteRef.current) {
+							micTrackRef.current.unmute();
 							setIsMuted(false);
 							shouldAutoUnmuteRef.current = false; // Clear flag after unmuting
 							console.log('[RoomConnection] Microphone unmuted automatically - agent connected');
@@ -345,23 +338,14 @@ export function useRoomConnection({
 	}, [onTranscriptsUpdate, onTranscriptReceived, onSummariesReceived]);
 
 	const toggleMute = useCallback(() => {
-		const publication = micPublicationRef.current;
-		if (publication || micTrackRef.current) {
+		if (micTrackRef.current) {
 			if (isMuted) {
-				if (publication) {
-					publication.unmute();
-				} else {
-					micTrackRef.current?.unmute();
-				}
+				micTrackRef.current.unmute();
 				setIsMuted(false);
 				shouldAutoUnmuteRef.current = false; // User manually unmuted, don't auto-unmute
 				console.log('[RoomConnection] Microphone unmuted');
 			} else {
-				if (publication) {
-					publication.mute();
-				} else {
-					micTrackRef.current?.mute();
-				}
+				micTrackRef.current.mute();
 				setIsMuted(true);
 				console.log('[RoomConnection] Microphone muted');
 			}
@@ -370,13 +354,8 @@ export function useRoomConnection({
 
 	// Force mute microphone (used when modal opens)
 	const muteMicrophone = useCallback(() => {
-		const publication = micPublicationRef.current;
-		if (!isMuted) {
-			if (publication) {
-				publication.mute();
-			} else {
-				micTrackRef.current?.mute();
-			}
+		if (micTrackRef.current && !isMuted) {
+			micTrackRef.current.mute();
 			setIsMuted(true);
 			console.log('[RoomConnection] Microphone force muted');
 		}
@@ -403,7 +382,6 @@ export function useRoomConnection({
 					micTrackRef.current.stop();
 					micTrackRef.current = null;
 				}
-				micPublicationRef.current = null;
 				shouldAutoUnmuteRef.current = false;
 				
 				currentRoom.removeAllListeners?.();
