@@ -15,6 +15,7 @@ import {
 	ChevronUp,
 } from 'lucide-react';
 import { MoodTrendsChart } from './MoodTrendsChart';
+import { DailyActivityChart } from './DailyActivityChart';
 
 interface ProgressDashboardProps {
 	userName: string;
@@ -166,17 +167,6 @@ export function ProgressDashboard({
 						<div className='bg-white rounded-xl shadow-sm p-4 border border-slate-200 hover:shadow-md transition-shadow'>
 							<div className='flex items-center gap-2 mb-2'>
 								<div className='text-xs sm:text-sm text-slate-600'>
-									With Improvement
-								</div>
-							</div>
-							<div className='text-2xl sm:text-3xl font-bold text-green-600'>
-								{metrics.sessionsWithMoodChange}
-							</div>
-						</div>
-
-						<div className='bg-white rounded-xl shadow-sm p-4 border border-slate-200 hover:shadow-md transition-shadow'>
-							<div className='flex items-center gap-2 mb-2'>
-								<div className='text-xs sm:text-sm text-slate-600'>
 									Avg. Improvement
 								</div>
 							</div>
@@ -189,6 +179,9 @@ export function ProgressDashboard({
 							</div>
 						</div>
 					</div>
+
+					{/* Daily Activity Chart */}
+					<DailyActivityChart />
 
 					{/* Two Column Layout for Desktop, Stacked for Mobile */}
 					<div className='grid lg:grid-cols-2 gap-4 sm:gap-6'>

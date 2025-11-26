@@ -89,7 +89,7 @@ export default function ViewJournalEntryPage() {
 							</button>
 							<button
 								onClick={handleEdit}
-								className='flex items-center gap-2 bg-blue-600 hover:bg-blue-700 text-white font-semibold py-2 px-4 rounded-lg transition-colors'
+								className='flex items-center gap-2 cursor-pointer bg-[#191919] hover:bg-black text-white font-semibold py-2 px-4 rounded-lg transition-colors'
 							>
 								<Edit size={18} />
 								<span>Edit</span>

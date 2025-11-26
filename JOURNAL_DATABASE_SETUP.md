@@ -99,3 +99,53 @@ CREATE POLICY "Users can delete journal images"
 - The storage bucket should be public if you want images to be directly accessible via URL
 - If you prefer private storage, you'll need to generate signed URLs instead of public URLs
 
+
+SQL SCRIPT FOR ACTIVITY
+
+-- Function to get user activity (sessions + journal entries) by date
+-- This allows for efficient server-side aggregation instead of fetching all records to the client
+CREATE OR REPLACE FUNCTION get_user_activity(
+  p_user_id UUID,
+  p_start_date TIMESTAMP WITH TIME ZONE,
+  p_end_date TIMESTAMP WITH TIME ZONE
+)
+RETURNS TABLE (
+  activity_date DATE,
+  activity_count BIGINT
+)
+LANGUAGE plpgsql
+SECURITY DEFINER
+AS $$
+BEGIN
+  RETURN QUERY
+  WITH combined_activity AS (
+    -- Therapy Sessions
+    SELECT 
+      (session_date AT TIME ZONE 'UTC')::DATE as date_key
+    FROM therapy_sessions
+    WHERE user_id = p_user_id
+      AND session_date >= p_start_date
+      AND session_date <= p_end_date
+    
+    UNION ALL
+    
+    -- Journal Entries
+    SELECT 
+      (created_at AT TIME ZONE 'UTC')::DATE as date_key
+    FROM journal_entries
+    WHERE user_id = p_user_id
+      AND created_at >= p_start_date
+      AND created_at <= p_end_date
+  )
+  SELECT
+    date_key as activity_date,
+    COUNT(*) as activity_count
+  FROM combined_activity
+  GROUP BY date_key
+  ORDER BY date_key;
+END;
+$$;
+-- Grant execute permission to authenticated users
+GRANT EXECUTE ON FUNCTION get_user_activity TO authenticated;
+-- Example usage:
+-- SELECT * FROM get_user_activity('user_uuid', '2024-01-01', '2024-12-31');

@@ -9,16 +9,17 @@ import {
 	createJournalEntry,
 	uploadJournalImage,
 	type CreateJournalEntryInput,
+	type UpdateJournalEntryInput,
 } from '@/utils/supabaseDatabase';
 
 export default function NewJournalEntryPage() {
 	const router = useRouter();
 	const [isSaving, setIsSaving] = useState(false);
 
-	const handleSave = async (input: CreateJournalEntryInput) => {
+	const handleSave = async (input: CreateJournalEntryInput | UpdateJournalEntryInput) => {
 		setIsSaving(true);
 		try {
-			const entry = await createJournalEntry(input);
+			const entry = await createJournalEntry(input as CreateJournalEntryInput);
 			if (entry) {
 				router.push(`/journal/${entry.id}/view`);
 			}
@@ -39,15 +40,11 @@ export default function NewJournalEntryPage() {
 			<div className='h-screen flex overflow-hidden bg-slate-50'>
 				<JournalSidebar />
 				<div className='flex-1 flex flex-col overflow-hidden'>
-					<div className='flex-1 overflow-y-auto p-6'>
-						<div className='max-w-4xl mx-auto'>
-							<JournalEntryEditor
-								onSave={handleSave}
-								onCancel={handleCancel}
-								isSaving={isSaving}
-							/>
-						</div>
-					</div>
+					<JournalEntryEditor
+						onSave={handleSave}
+						onCancel={handleCancel}
+						isSaving={isSaving}
+					/>
 				</div>
 			</div>
 		</ProtectedRoute>

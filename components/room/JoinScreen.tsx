@@ -116,7 +116,7 @@ export function JoinScreen({
 					<button
 						onClick={onJoin}
 						disabled={isConnecting || !userName.trim() || isBlocked}
-						className='cursor-pointer w-full bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-2xl transition-all duration-200 flex items-center justify-center shadow-xl shadow-blue-500/25 hover:shadow-blue-500/40 disabled:shadow-none'
+						className='cursor-pointer w-full bg-[#191919] hover:bg-black disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-semibold py-4 px-6 rounded-lg transition-all duration-200 flex items-center justify-center disabled:shadow-none'
 					>
 						{isConnecting || isWaitingForAgent ? (
 							<>

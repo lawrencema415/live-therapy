@@ -107,10 +107,9 @@ export default function JournalPage() {
 								)}
 								<button
 									onClick={handleCreateNew}
-									className='flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold py-2.5 px-4 sm:px-5 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer'
+									className='flex items-center gap-2 bg-[#191919] hover:bg-black active:bg-neutral-800 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-2 cursor-pointer'
 									aria-label='Create new journal entry'
 								>
-									<Plus size={20} className='shrink-0' />
 									<span className='hidden sm:inline whitespace-nowrap'>New Entry</span>
 									<span className='sm:hidden'>New</span>
 								</button>
@@ -159,7 +158,7 @@ export default function JournalPage() {
 										</p>
 										<button
 											onClick={handleCreateNew}
-											className='inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer'
+											className='inline-flex items-center gap-2 bg-[#191919] hover:bg-black active:bg-neutral-800 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-2 cursor-pointer'
 											aria-label='Create your first journal entry'
 										>
 											<Plus size={20} />

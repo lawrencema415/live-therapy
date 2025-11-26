@@ -41,7 +41,7 @@ export async function getOrCreateSession(sessionTimestamp: number = Date.now()):
 				sessionDateStart.setSeconds(0, 0); // Round down to start of minute
 				const sessionDateEnd = new Date(sessionDateStart);
 				sessionDateEnd.setMinutes(sessionDateEnd.getMinutes() + 1); // End of minute
-				
+
 				const { data: existingSessions, error: selectError } = await supabase
 					.from('therapy_sessions')
 					.select('id')
@@ -50,7 +50,7 @@ export async function getOrCreateSession(sessionTimestamp: number = Date.now()):
 					.lt('session_date', sessionDateEnd.toISOString())
 					.order('session_date', { ascending: false })
 					.limit(1);
-				
+
 				if (selectError) {
 					console.warn('[SupabaseDB] Error checking for existing session:', selectError);
 					// Continue to create new session
@@ -59,11 +59,11 @@ export async function getOrCreateSession(sessionTimestamp: number = Date.now()):
 					console.log(`[SupabaseDB] Found existing session: ${existingSessions[0].id} for timestamp ${sessionTimestamp}`);
 					return existingSessions[0].id;
 				}
-				
+
 				// No existing session found, create a new one
 				// Use the actual timestamp (not normalized to start of day) to ensure uniqueness
 				const actualSessionDate = new Date(sessionTimestamp);
-				
+
 				// Create new session with actual timestamp
 				const { data: newSession, error: insertError } = await supabase
 					.from('therapy_sessions')
@@ -108,9 +108,9 @@ export async function saveTranscripts(
 ): Promise<boolean> {
 	try {
 		const supabase = createClient();
-		
+
 		console.log(`[SupabaseDB] Saving transcripts for session ${sessionId}, input count: ${transcripts.length}`);
-		
+
 		// Filter and prepare transcripts
 		const validTranscripts = transcripts
 			.filter(t => t.text && t.text.trim().length > 0)
@@ -226,7 +226,7 @@ export async function loadRecentTranscripts(userId?: string): Promise<StoredTran
 	try {
 		const supabase = createClient();
 		let finalUserId = userId;
-		
+
 		// Only call getUser if userId not provided
 		if (!finalUserId) {
 			const { data: { user } } = await supabase.auth.getUser();
@@ -264,7 +264,7 @@ export async function saveSummary(
 ): Promise<boolean> {
 	try {
 		const supabase = createClient();
-		
+
 		// Delete existing summaries for this session to prevent duplicates
 		await supabase
 			.from('therapy_summaries')
@@ -357,7 +357,7 @@ export async function loadSummaries(limit: number = 10, userId?: string): Promis
 	try {
 		const supabase = createClient();
 		let finalUserId = userId;
-		
+
 		// Only call getUser if userId not provided
 		if (!finalUserId) {
 			const { data: { user } } = await supabase.auth.getUser();
@@ -413,14 +413,14 @@ export async function saveMoodData(
 ): Promise<boolean> {
 	try {
 		const supabase = createClient();
-		
+
 		// Check if mood data exists for this session (don't use .single() to avoid 406 errors)
 		const { data: existingMoodData } = await supabase
 			.from('therapy_mood_data')
 			.select('id')
 			.eq('session_id', sessionId)
 			.limit(1);
-		
+
 		const existing = existingMoodData && existingMoodData.length > 0 ? existingMoodData[0] : null;
 
 		const moodDataUpdate: any = {
@@ -445,7 +445,7 @@ export async function saveMoodData(
 				session_id: sessionId,
 				session_timestamp: sessionTimestamp,
 			};
-			
+
 			if (type === 'pre') {
 				updateFields.pre_session_rating = moodData.rating;
 				updateFields.pre_session_notes = moodData.notes || null;
@@ -455,7 +455,7 @@ export async function saveMoodData(
 				updateFields.post_session_notes = moodData.notes || null;
 				updateFields.post_session_timestamp = moodData.timestamp;
 			}
-			
+
 			const { error } = await supabase
 				.from('therapy_mood_data')
 				.update(updateFields)
@@ -465,7 +465,7 @@ export async function saveMoodData(
 				console.error('[SupabaseDB] Error updating mood data:', error);
 				return false;
 			}
-			
+
 			console.log(`[SupabaseDB] ✓ Updated ${type}-session mood data for existing record (id: ${existing.id}, session: ${sessionId})`);
 		} else {
 			// Insert new - set null values for the other type to ensure proper structure
@@ -478,7 +478,7 @@ export async function saveMoodData(
 				moodDataUpdate.pre_session_notes = null;
 				moodDataUpdate.pre_session_timestamp = null;
 			}
-			
+
 			const { error } = await supabase
 				.from('therapy_mood_data')
 				.insert(moodDataUpdate);
@@ -487,7 +487,7 @@ export async function saveMoodData(
 				console.error('[SupabaseDB] Error inserting mood data:', error);
 				return false;
 			}
-			
+
 			console.log(`[SupabaseDB] ✓ Inserted new ${type}-session mood data record (session: ${sessionId})`);
 		}
 
@@ -507,7 +507,7 @@ export async function loadMoodData(userId?: string): Promise<SessionMoodData[]> 
 	try {
 		const supabase = createClient();
 		let finalUserId = userId;
-		
+
 		// Only call getUser if userId not provided
 		if (!finalUserId) {
 			const { data: { user } } = await supabase.auth.getUser();
@@ -860,6 +860,107 @@ export async function deleteJournalImage(imageUrl: string): Promise<boolean> {
 	} catch (error) {
 		console.error('[SupabaseDB] Error in deleteJournalImage:', error);
 		return false;
+	}
+}
+
+/**
+ * Activity Data for Contribution Chart
+ */
+/**
+ * Activity Data for Contribution Chart
+ */
+export interface ActivityData {
+	date: string; // ISO date string (YYYY-MM-DD)
+	count: number;
+	sessionCount: number;
+	journalCount: number;
+	level: 0 | 1 | 2 | 3 | 4; // 0 = no activity, 4 = high activity
+}
+
+/**
+ * Get user activity data for the contribution chart
+ * Aggregates therapy sessions and journal entries by date
+ */
+export async function getUserActivityData(
+	startDate: Date,
+	endDate: Date
+): Promise<ActivityData[]> {
+	try {
+		const supabase = createClient();
+		const { data: { user } } = await supabase.auth.getUser();
+		if (!user) return [];
+
+		const startIso = startDate.toISOString();
+		const endIso = endDate.toISOString();
+
+		// 1. Fetch Therapy Sessions
+		const { data: sessions, error: sessionError } = await supabase
+			.from('therapy_sessions')
+			.select('session_date')
+			.eq('user_id', user.id)
+			.gte('session_date', startIso)
+			.lte('session_date', endIso);
+
+		if (sessionError) {
+			console.error('[SupabaseDB] Error loading sessions for activity:', sessionError);
+		}
+
+		// 2. Fetch Journal Entries
+		const { data: entries, error: entryError } = await supabase
+			.from('journal_entries')
+			.select('created_at')
+			.eq('user_id', user.id)
+			.gte('created_at', startIso)
+			.lte('created_at', endIso);
+
+		if (entryError) {
+			console.error('[SupabaseDB] Error loading journal entries for activity:', entryError);
+		}
+
+		// 3. Aggregate Data
+		const activityMap = new Map<string, { sessions: number; journals: number }>();
+
+		// Helper to increment count for a date
+		const incrementDate = (dateString: string, type: 'session' | 'journal') => {
+			// Extract YYYY-MM-DD
+			const date = new Date(dateString);
+			const key = date.toISOString().split('T')[0];
+			const current = activityMap.get(key) || { sessions: 0, journals: 0 };
+
+			if (type === 'session') current.sessions++;
+			else current.journals++;
+
+			activityMap.set(key, current);
+		};
+
+		sessions?.forEach(session => incrementDate(session.session_date, 'session'));
+		entries?.forEach(entry => incrementDate(entry.created_at, 'journal'));
+
+		// 4. Convert to array
+		const result: ActivityData[] = [];
+
+		activityMap.forEach((data, date) => {
+			const count = data.sessions + data.journals;
+			let level: 0 | 1 | 2 | 3 | 4 = 0;
+			if (count === 0) level = 0;
+			else if (count === 1) level = 1;
+			else if (count <= 2) level = 2;
+			else if (count <= 4) level = 3;
+			else level = 4;
+
+			result.push({
+				date,
+				count,
+				sessionCount: data.sessions,
+				journalCount: data.journals,
+				level
+			});
+		});
+
+		return result;
+	} catch (error) {
+		console.error('[SupabaseDB] Error in getUserActivityData:', error);
+		return [];
 	}
 }
 

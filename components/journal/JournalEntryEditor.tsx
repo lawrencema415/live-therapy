@@ -90,7 +90,7 @@ export function JournalEntryEditor({
 	const canSave = title.trim().length > 0 && !isSaving;
 
 	return (
-		<div className='bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden'>
+		<div className='h-full w-full flex flex-col bg-white'>
 			{/* Header */}
 			<div className='px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between'>
 				<button
@@ -104,7 +104,7 @@ export function JournalEntryEditor({
 					<button
 						onClick={handleSave}
 						disabled={!canSave}
-						className='bg-blue-600 hover:bg-blue-700 disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-colors'
+						className='cursor-pointer bg-[#191919] hover:bg-black disabled:bg-slate-400 disabled:cursor-not-allowed text-white font-semibold py-2 px-4 rounded-lg transition-colors'
 					>
 						{isSaving ? 'Saving...' : 'Save'}
 					</button>
@@ -112,7 +112,7 @@ export function JournalEntryEditor({
 			</div>
 
 			{/* Editor */}
-			<div className='p-6 space-y-6'>
+			<div className='flex-1 flex flex-col p-6 space-y-6 overflow-y-auto'>
 				{/* Title */}
 				<div>
 					<label className='block text-sm font-medium text-slate-700 mb-2'>
@@ -128,7 +128,7 @@ export function JournalEntryEditor({
 				</div>
 
 				{/* Content */}
-				<div>
+				<div className='flex-1 flex flex-col'>
 					<label className='block text-sm font-medium text-slate-700 mb-2'>
 						Content
 					</label>
@@ -136,25 +136,33 @@ export function JournalEntryEditor({
 						value={content}
 						onChange={(e) => setContent(e.target.value)}
 						placeholder='Write your thoughts here...'
-						rows={12}
-						className='w-full px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-800 resize-none'
+						className='w-full flex-1 px-4 py-2.5 border border-slate-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent text-slate-800 resize-none'
 					/>
 				</div>
 
 				{/* Images */}
 				<div>
-					<label className='block text-sm font-medium text-slate-700 mb-2'>
-						Images
-					</label>
-					<div className='space-y-4'>
-						{/* Image Upload Button */}
+					<div className='flex items-center justify-between mb-2'>
+						<label className='block text-sm font-medium text-slate-700'>
+							Images
+						</label>
+						{(images.length > 0 || uploadingImages.length > 0) && (
+							<span className='text-xs text-slate-500'>
+								{images.length + uploadingImages.length} image{images.length + uploadingImages.length !== 1 ? 's' : ''}
+							</span>
+						)}
+					</div>
+					
+					<div className='flex gap-3 overflow-x-auto pb-2 scrollbar-thin scrollbar-thumb-slate-200 scrollbar-track-transparent'>
+						{/* Upload Button */}
 						<button
 							type='button'
 							onClick={() => fileInputRef.current?.click()}
-							className='flex items-center gap-2 px-4 py-2.5 border-2 border-dashed border-slate-300 rounded-lg text-slate-600 hover:border-blue-500 hover:text-blue-600 transition-colors w-full'
+							className='shrink-0 w-24 h-24 border-2 border-dashed border-slate-300 rounded-lg flex flex-col items-center justify-center gap-1 text-slate-500 hover:border-blue-500 hover:text-blue-600 transition-colors bg-slate-50'
+							title='Add images'
 						>
 							<Upload size={20} />
-							<span>Upload Images</span>
+							<span className='text-xs font-medium'>Add</span>
 						</button>
 						<input
 							ref={fileInputRef}
@@ -165,29 +173,36 @@ export function JournalEntryEditor({
 							className='hidden'
 						/>
 
-						{/* Image Preview Grid */}
-						{images.length > 0 && (
-							<div className='grid grid-cols-2 sm:grid-cols-3 gap-4'>
-								{images.map((imageUrl, index) => (
-									<div
-										key={index}
-										className='relative group aspect-square rounded-lg overflow-hidden border border-slate-200'
-									>
-										<img
-											src={imageUrl}
-											alt={`Upload ${index + 1}`}
-											className='w-full h-full object-cover'
-										/>
-										<button
-											onClick={() => handleRemoveImage(index)}
-											className='absolute top-2 right-2 p-1.5 bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-opacity hover:bg-red-700'
-										>
-											<X size={16} />
-										</button>
-									</div>
-								))}
+						{/* Uploading Placeholders */}
+						{uploadingImages.map((id) => (
+							<div
+								key={id}
+								className='shrink-0 w-24 h-24 rounded-lg border border-slate-200 bg-slate-50 flex items-center justify-center'
+							>
+								<div className='w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin'></div>
 							</div>
-						)}
+						))}
+
+						{/* Image Previews */}
+						{images.map((imageUrl, index) => (
+							<div
+								key={index}
+								className='relative group shrink-0 w-24 h-24 rounded-lg overflow-hidden border border-slate-200'
+							>
+								<img
+									src={imageUrl}
+									alt={`Upload ${index + 1}`}
+									className='w-full h-full object-cover'
+								/>
+								<button
+									onClick={() => handleRemoveImage(index)}
+									className='absolute top-1 right-1 p-1 bg-black/50 hover:bg-red-600 text-white rounded-full opacity-0 group-hover:opacity-100 transition-all backdrop-blur-sm'
+									title='Remove image'
+								>
+									<X size={12} />
+								</button>
+							</div>
+						))}
 					</div>
 				</div>
 			</div>
