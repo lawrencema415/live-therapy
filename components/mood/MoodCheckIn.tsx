@@ -72,7 +72,7 @@ export function MoodCheckIn({
 					<button
 						type='button'
 						onClick={() => setShowNotes(!showNotes)}
-						className='text-sm text-blue-600 hover:text-blue-700 mb-2'
+						className='cursor-pointer text-sm text-slate-600 hover:text-slate-800 mb-2'
 					>
 						{showNotes ? 'Hide' : 'Add'} notes (optional)
 					</button>
@@ -101,7 +101,7 @@ export function MoodCheckIn({
 					<button
 						type='button'
 						onClick={handleSubmit}
-						className='cursor-pointer flex-1 px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors font-semibold'
+						className='cursor-pointer flex-1 px-4 py-2 bg-[#191919] hover:bg-black text-white rounded-lg transition-colors font-semibold'
 					>
 						Continue
 					</button>

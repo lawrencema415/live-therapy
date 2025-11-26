@@ -18,7 +18,6 @@ export default function JournalPage() {
 	const [entries, setEntries] = useState<JournalEntry[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
-	const [isRefreshing, setIsRefreshing] = useState(false);
 
 	useEffect(() => {
 		if (!authLoading && user) {
@@ -26,12 +25,8 @@ export default function JournalPage() {
 		}
 	}, [authLoading, user]);
 
-	const loadEntries = async (showRefreshIndicator = false) => {
-		if (showRefreshIndicator) {
-			setIsRefreshing(true);
-		} else {
-			setIsLoading(true);
-		}
+	const loadEntries = async () => {
+		setIsLoading(true);
 		setError(null);
 		try {
 			const loadedEntries = await getJournalEntries();
@@ -42,7 +37,6 @@ export default function JournalPage() {
 			console.error('Error loading journal entries:', err);
 		} finally {
 			setIsLoading(false);
-			setIsRefreshing(false);
 		}
 	};
 
@@ -52,10 +46,6 @@ export default function JournalPage() {
 
 	const handleEntryDeleted = () => {
 		loadEntries();
-	};
-
-	const handleRefresh = () => {
-		loadEntries(true);
 	};
 
 	if (authLoading || isLoading) {
@@ -91,20 +81,6 @@ export default function JournalPage() {
 								</p>
 							</div>
 							<div className='flex items-center gap-2 shrink-0'>
-								{entries.length > 0 && (
-									<button
-										onClick={handleRefresh}
-										disabled={isRefreshing}
-										className='flex items-center justify-center w-10 h-10 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 transition-all duration-200 cursor-pointer focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed'
-										title='Refresh entries'
-										aria-label='Refresh journal entries'
-									>
-										<RefreshCw
-											size={18}
-											className={isRefreshing ? 'animate-spin' : ''}
-										/>
-									</button>
-								)}
 								<button
 									onClick={handleCreateNew}
 									className='flex items-center gap-2 bg-[#191919] hover:bg-black active:bg-neutral-800 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-2 cursor-pointer'
@@ -133,7 +109,7 @@ export default function JournalPage() {
 											{error}
 										</p>
 										<button
-											onClick={handleRefresh}
+											onClick={loadEntries}
 											className='inline-flex items-center gap-2 bg-red-600 hover:bg-red-700 text-white font-semibold py-2.5 px-5 rounded-lg transition-colors cursor-pointer focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2'
 											aria-label='Retry loading entries'
 										>

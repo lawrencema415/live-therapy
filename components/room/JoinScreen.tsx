@@ -159,13 +159,13 @@ export function JoinScreen({
 					<div className='grid grid-cols-2 gap-3'>
 						<Link
 							href='/dashboard'
-							className='block w-full text-center text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-medium py-3 px-4 rounded-xl transition-all border border-blue-200 hover:border-blue-300'
+							className='block w-full text-center text-sm bg-[#191919] hover:bg-black text-white font-semibold py-3 px-4 rounded-xl transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-2'
 						>
 							Dashboard
 						</Link>
 						<Link
 							href='/journal'
-							className='block w-full text-center text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-medium py-3 px-4 rounded-xl transition-all border border-blue-200 hover:border-blue-300'
+							className='block w-full text-center text-sm bg-[#191919] hover:bg-black text-white font-semibold py-3 px-4 rounded-xl transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-2'
 						>
 							Journal
 						</Link>
