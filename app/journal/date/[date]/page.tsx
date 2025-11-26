@@ -133,6 +133,24 @@ export default function JournalDatePage() {
 										<CalendarIcon size={32} className='text-slate-400' />
 									</div>
 									<h3 className='text-xl font-semibold text-slate-800 mb-2'>
+										No entries for this date
+									</h3>
+									<p className='text-sm text-slate-600 mb-6'>
+										You haven't created any journal entries for {formattedDate}.
+									</p>
+									<button
+										onClick={() => router.push('/journal')}
+										className='inline-flex items-center gap-2 bg-blue-600 hover:bg-blue-700 active:bg-blue-800 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 cursor-pointer'
+									>
+										<ArrowLeft size={18} />
+										Back to Calendar
+									</button>
+								</div>
+							</div>
+						) : (
+							<div className='max-w-4xl mx-auto'>
+								<div className='grid gap-4 sm:gap-5 sm:grid-cols-2 lg:grid-cols-3'>
+									{dateEntries.map((entry) => (
 										<JournalEntryCard
 											key={entry.id}
 											entry={entry}
@@ -148,4 +166,3 @@ export default function JournalDatePage() {
 		</ProtectedRoute>
 	);
 }
-

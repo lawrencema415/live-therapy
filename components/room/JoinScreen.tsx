@@ -61,24 +61,6 @@ export function JoinScreen({
 								</button>
 							)}
 						</div>
-						{hasPreviousSession && (
-							<div className='mt-3 pt-3 border-t border-blue-200/50'>
-								<p className='text-xs text-blue-700 flex items-center gap-1.5'>
-									<svg
-										className='w-3.5 h-3.5'
-										fill='currentColor'
-										viewBox='0 0 20 20'
-									>
-										<path
-											fillRule='evenodd'
-											d='M10 18a8 8 0 100-16 8 8 0 000 16zm3.707-9.293a1 1 0 00-1.414-1.414L9 10.586 7.707 9.293a1 1 0 00-1.414 1.414l2 2a1 1 0 001.414 0l4-4z'
-											clipRule='evenodd'
-										/>
-									</svg>
-									Welcome back! Your previous sessions are saved.
-								</p>
-							</div>
-						)}
 					</div>
 
 					{/* Microphone Permission Warning */}
@@ -159,13 +141,13 @@ export function JoinScreen({
 					<div className='grid grid-cols-2 gap-3'>
 						<Link
 							href='/dashboard'
-							className='block w-full text-center text-sm bg-[#191919] hover:bg-black text-white font-semibold py-3 px-4 rounded-xl transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-2'
+							className='block w-full text-center text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-medium py-3 px-4 rounded-xl transition-all border border-blue-200 hover:border-blue-300'
 						>
 							Dashboard
 						</Link>
 						<Link
 							href='/journal'
-							className='block w-full text-center text-sm bg-[#191919] hover:bg-black text-white font-semibold py-3 px-4 rounded-xl transition-all cursor-pointer focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-2'
+							className='block w-full text-center text-sm text-blue-600 hover:text-blue-700 hover:bg-blue-50 font-medium py-3 px-4 rounded-xl transition-all border border-blue-200 hover:border-blue-300'
 						>
 							Journal
 						</Link>

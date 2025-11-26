@@ -127,9 +127,61 @@ export default function ViewJournalEntryPage() {
 								{/* Content */}
 								<div className='px-6 py-6'>
 									<div className='prose max-w-none'>
-										<p className='text-slate-700 whitespace-pre-wrap leading-relaxed'>
-											{entry.content}
-										</p>
+										<div 
+										className='prose max-w-none text-slate-700 leading-relaxed'
+										dangerouslySetInnerHTML={{ __html: entry.content }}
+									/>
+									<style jsx global>{`
+										.prose ul {
+											list-style-type: disc;
+											padding-left: 1.5em;
+										}
+										.prose ol {
+											list-style-type: decimal;
+											padding-left: 1.5em;
+										}
+										.prose ul[data-type="taskList"] {
+											list-style: none;
+											padding: 0;
+										}
+										.prose ul[data-type="taskList"] li {
+											display: flex;
+											align-items: flex-start;
+											margin-bottom: 0.25em;
+										}
+										.prose ul[data-type="taskList"] li > label {
+											margin-right: 0.5em;
+											user-select: none;
+										}
+										.prose ul[data-type="taskList"] li > div {
+											flex: 1;
+										}
+										.prose h1 {
+											font-size: 1.5em;
+											font-weight: bold;
+											margin-top: 0.5em;
+											margin-bottom: 0.5em;
+											color: #1e293b;
+										}
+										.prose h2 {
+											font-size: 1.25em;
+											font-weight: bold;
+											margin-top: 0.5em;
+											margin-bottom: 0.5em;
+											color: #334155;
+										}
+										.prose blockquote {
+											border-left: 3px solid #cbd5e1;
+											padding-left: 1em;
+											color: #475569;
+											font-style: italic;
+										}
+										/* Checkbox styling */
+										.prose input[type="checkbox"] {
+											margin-top: 0.3em;
+											cursor: default;
+										}
+									`}</style>
 									</div>
 								</div>
 
