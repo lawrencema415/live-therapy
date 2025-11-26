@@ -599,12 +599,14 @@ export interface CreateJournalEntryInput {
 	title: string;
 	content: string;
 	images?: string[];
+	created_at?: string;
 }
 
 export interface UpdateJournalEntryInput {
 	title?: string;
 	content?: string;
 	images?: string[];
+	created_at?: string;
 }
 
 /**
@@ -628,6 +630,7 @@ export async function createJournalEntry(
 				title: input.title,
 				content: input.content,
 				images: input.images || [],
+				created_at: input.created_at || new Date().toISOString(),
 			})
 			.select()
 			.single();
@@ -667,6 +670,7 @@ export async function updateJournalEntry(
 		if (input.title !== undefined) updateData.title = input.title;
 		if (input.content !== undefined) updateData.content = input.content;
 		if (input.images !== undefined) updateData.images = input.images;
+		if (input.created_at !== undefined) updateData.created_at = input.created_at;
 
 		const { data, error } = await supabase
 			.from('journal_entries')
