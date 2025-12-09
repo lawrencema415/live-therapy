@@ -125,7 +125,7 @@ export function ProgressDashboard({
 					</h1>
 					<button
 						onClick={() => router.back()}
-						className='flex items-center gap-2 text-slate-600 hover:text-slate-800 transition-colors p-2 rounded-lg hover:cursor-pointer hover:bg-slate-100'
+						className='cursor-pointer flex items-center gap-2 text-slate-600 hover:text-slate-800 transition-colors p-2 rounded-lg hover:cursor-pointer hover:bg-slate-100'
 						aria-label='Go back'
 					>
 						<ArrowLeft size={20} />

@@ -82,7 +82,7 @@ export default function ViewJournalEntryPage() {
 						<div className='flex items-center justify-between'>
 							<button
 								onClick={() => router.push('/journal')}
-								className='flex items-center gap-2 text-slate-600 hover:text-slate-800 transition-colors'
+								className='flex items-center gap-2 text-slate-600 hover:text-slate-800 transition-colors cursor-pointer'
 							>
 								<ArrowLeft size={20} />
 								<span className='text-sm font-medium'>Back</span>

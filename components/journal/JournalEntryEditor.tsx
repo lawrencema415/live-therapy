@@ -9,8 +9,7 @@ import TaskItem from '@tiptap/extension-task-item';
 import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
 import clsx from 'clsx';
-import Calendar from 'react-calendar';
-import 'react-calendar/dist/Calendar.css';
+
 import {
 	type JournalEntry,
 	type CreateJournalEntryInput,
@@ -139,20 +138,66 @@ interface DatePickerProps {
 	onClose: () => void;
 }
 
+// Helper to get days for the custom calendar
+const getCalendarDays = (year: number, month: number) => {
+	const firstDay = new Date(year, month, 1);
+	const lastDay = new Date(year, month + 1, 0);
+	const daysInMonth = lastDay.getDate();
+	const startingDayOfWeek = firstDay.getDay(); // 0 = Sunday
+
+	const days: (Date | null)[] = [];
+
+	// Add empty slots for previous month days
+	for (let i = 0; i < startingDayOfWeek; i++) {
+		days.push(null);
+	}
+
+	// Add days of current month
+	for (let i = 1; i <= daysInMonth; i++) {
+		days.push(new Date(year, month, i));
+	}
+
+	return days;
+};
+
 const DatePicker = ({ date, onChange, onClose }: DatePickerProps) => {
 	const [selectedDate, setSelectedDate] = useState(date);
+	// We use viewDate to track which month is currently being viewed, independent of selection
+	const [viewDate, setViewDate] = useState(date);
+	
 	const [hour, setHour] = useState(date.getHours() % 12 || 12);
 	const [minute, setMinute] = useState(date.getMinutes());
 	const [ampm, setAmpm] = useState(date.getHours() >= 12 ? 'PM' : 'AM');
+	const calendarRef = useRef<HTMLDivElement>(null);
 
-	const handleDateChange = (value: any) => {
-		if (value instanceof Date) {
-			const newDate = new Date(value);
-			newDate.setHours(selectedDate.getHours());
-			newDate.setMinutes(selectedDate.getMinutes());
-			setSelectedDate(newDate);
-			onChange(newDate);
-		}
+	useEffect(() => {
+		const handleClickOutside = (event: MouseEvent) => {
+			if (calendarRef.current && !calendarRef.current.contains(event.target as Node)) {
+				onClose();
+			}
+		};
+
+		document.addEventListener('mousedown', handleClickOutside);
+		return () => {
+			document.removeEventListener('mousedown', handleClickOutside);
+		};
+	}, [onClose]);
+
+	const days = getCalendarDays(viewDate.getFullYear(), viewDate.getMonth());
+	const weekDays = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
+
+	const handleDateSelect = (day: Date) => {
+		const newDate = new Date(day);
+		newDate.setHours(selectedDate.getHours());
+		newDate.setMinutes(selectedDate.getMinutes());
+		setSelectedDate(newDate);
+		onChange(newDate);
+	};
+
+	const navigateMonth = (direction: number) => {
+		const newViewDate = new Date(viewDate);
+		newViewDate.setMonth(newViewDate.getMonth() + direction);
+		setViewDate(newViewDate);
 	};
 
 	const updateTime = (h: number, m: number, ap: string) => {
@@ -194,63 +239,98 @@ const DatePicker = ({ date, onChange, onClose }: DatePickerProps) => {
 	const setToYesterday = () => {
 		const yesterday = new Date();
 		yesterday.setDate(yesterday.getDate() - 1);
-		// Keep current time or reset? Usually keep current time or set to now-24h.
-		// Let's keep the time components of the *current selection* but change the date.
 		yesterday.setHours(selectedDate.getHours());
 		yesterday.setMinutes(selectedDate.getMinutes());
 		setSelectedDate(yesterday);
+		setViewDate(yesterday); // Construct view to yesterday too
 		onChange(yesterday);
 	};
 
 	return (
-		<div className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-[#1e293b] border border-slate-700 rounded-xl shadow-xl p-4 z-50 w-[320px] text-slate-200">
+		<div ref={calendarRef} className="absolute top-full left-1/2 -translate-x-1/2 mt-2 bg-white border border-black rounded-xl shadow-xl p-4 z-50 w-[320px] text-slate-800 animate-in fade-in zoom-in duration-200">
 			{/* Header */}
 			<div className="flex items-center justify-between mb-4">
-				<button onClick={onClose} className="text-slate-400 hover:text-white">
-					<ArrowLeft size={16} />
+				<button 
+					onClick={() => navigateMonth(-1)}
+					className="text-slate-500 hover:text-black p-1 hover:bg-slate-100 rounded transition-colors"
+				>
+					<ChevronLeft size={16} />
 				</button>
-				<span className="font-semibold text-white">
-					{selectedDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
+				<span className="font-semibold text-slate-900">
+					{viewDate.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })}
 				</span>
-				<div className="w-4" /> {/* Spacer */}
+				<button 
+					onClick={() => navigateMonth(1)}
+					className="text-slate-500 hover:text-black p-1 hover:bg-slate-100 rounded transition-colors"
+				>
+					<ChevronRight size={16} />
+				</button>
 			</div>
 
-			{/* Calendar */}
-			<div className="calendar-dark mb-4">
-				<Calendar
-					onChange={handleDateChange}
-					value={selectedDate}
-					prevLabel={<ChevronLeft size={16} />}
-					nextLabel={<ChevronRight size={16} />}
-					formatShortWeekday={(locale, date) => ['S', 'M', 'T', 'W', 'T', 'F', 'S'][date.getDay()]}
-					className="bg-transparent border-none w-full text-sm font-medium"
-					tileClassName={({ date, view }) => clsx(
-						'hover:bg-slate-700 rounded-full text-slate-300 aspect-square flex items-center justify-center p-0',
-						date.getDate() === selectedDate.getDate() && date.getMonth() === selectedDate.getMonth() ? '!bg-blue-600 !text-white font-bold' : ''
-					)}
-				/>
+			{/* Custom Calendar Grid */}
+			<div className="mb-4">
+				{/* Weekdays */}
+				<div className="grid grid-cols-7 mb-2">
+					{weekDays.map((day, i) => (
+						<div key={i} className="text-center text-xs font-bold text-slate-500 py-1">
+							{day}
+						</div>
+					))}
+				</div>
+				
+				{/* Days */}
+				<div className="grid grid-cols-7 gap-1">
+					{days.map((day, i) => {
+						if (!day) return <div key={`empty-${i}`} />;
+						
+						const isSelected = day.getDate() === selectedDate.getDate() && 
+										 day.getMonth() === selectedDate.getMonth() && 
+										 day.getFullYear() === selectedDate.getFullYear();
+						
+						const isToday = day.getDate() === new Date().getDate() && 
+										day.getMonth() === new Date().getMonth() &&
+										day.getFullYear() === new Date().getFullYear();
+
+						return (
+							<button
+								key={i}
+								onClick={() => handleDateSelect(day)}
+								className={clsx(
+									"w-8 h-8 rounded-full flex items-center justify-center text-sm transition-all mx-auto relative", // Added relative
+									isSelected 
+										? "bg-blue-600 text-white font-bold shadow-md shadow-blue-500/30" 
+										: isToday 
+											? "border border-blue-600 text-blue-700 font-bold"
+											: "text-slate-700 hover:bg-slate-100 hover:text-slate-900"
+								)}
+							>
+								{day.getDate()}
+							</button>
+						);
+					})}
+				</div>
 			</div>
 
 			{/* Time Selection */}
-			<div className="mb-4">
-				<label className="block text-xs font-medium text-slate-400 mb-1 uppercase">Time</label>
-				<div className="flex items-center gap-2 bg-slate-800 p-1 rounded-lg border border-slate-700">
+			<div className="mb-4 pt-4 border-t border-slate-100">
+				<label className="block text-xs font-medium text-slate-500 mb-1.5 uppercase tracking-wider">Time</label>
+				<div className="flex items-center gap-2 bg-slate-50 p-1 rounded-lg border border-slate-200">
 					<input
 						type="number"
 						value={hour.toString().padStart(2, '0')}
 						onChange={handleHourChange}
-						className="w-12 bg-transparent text-center text-white focus:outline-none"
+						className="w-12 bg-transparent text-center text-slate-900 focus:outline-none font-mono"
 					/>
-					<span className="text-slate-400">:</span>
+					<span className="text-slate-400 font-bold">:</span>
 					<input
 						type="number"
 						value={minute.toString().padStart(2, '0')}
 						onChange={handleMinuteChange}
-						className="w-12 bg-transparent text-center text-white focus:outline-none"
+						className="w-12 bg-transparent text-center text-slate-900 focus:outline-none font-mono"
 					/>
 					<button
 						onClick={toggleAmpm}
-						className="ml-auto px-3 py-1 bg-slate-700 rounded text-xs font-medium hover:bg-slate-600 transition-colors"
+						className="ml-auto px-3 py-1 bg-white border border-slate-200 rounded text-xs font-bold text-slate-700 hover:bg-slate-50 transition-colors shadow-sm"
 					>
 						{ampm}
 					</button>
@@ -258,62 +338,21 @@ const DatePicker = ({ date, onChange, onClose }: DatePickerProps) => {
 			</div>
 
 			{/* Footer */}
-			<div className="flex items-center justify-between pt-4 border-t border-slate-700">
-				<div className="flex items-center gap-2">
-					<span className="text-xs text-slate-400">All day</span>
-					<div className="w-8 h-4 bg-slate-700 rounded-full relative cursor-pointer">
-						<div className="absolute left-0.5 top-0.5 w-3 h-3 bg-slate-400 rounded-full"></div>
-					</div>
-				</div>
+			<div className="flex items-center justify-between pt-3 border-t border-slate-100">
+				<button onClick={onClose} className="text-xs text-slate-500 hover:text-slate-800 transition-colors">
+					Close
+				</button>
 				<button
 					onClick={setToYesterday}
-					className="text-xs text-blue-400 hover:text-blue-300 transition-colors"
+					className="text-xs text-blue-600 hover:text-blue-700 transition-colors font-medium"
 				>
 					Set to Yesterday
 				</button>
 			</div>
-			
-			<style jsx global>{`
-				.calendar-dark .react-calendar__navigation {
-					display: none; /* Hide default nav since we have custom header */
-				}
-				.calendar-dark .react-calendar__month-view__weekdays {
-					text-transform: uppercase;
-					font-size: 0.75em;
-					font-weight: bold;
-					color: #64748b;
-					text-decoration: none;
-					margin-bottom: 0.5em;
-				}
-				.calendar-dark .react-calendar__month-view__weekdays__weekday {
-					padding: 0.5em;
-					display: flex;
-					align-items: center;
-					justify-content: center;
-				}
-				.calendar-dark abbr[title] {
-					text-decoration: none;
-				}
-				.calendar-dark .react-calendar__tile {
-					padding: 0;
-					background: none;
-				}
-				.calendar-dark .react-calendar__tile:enabled:hover,
-				.calendar-dark .react-calendar__tile:enabled:focus {
-					background-color: #334155;
-				}
-				.calendar-dark .react-calendar__tile--now {
-					background: transparent;
-					color: #60a5fa;
-				}
-				.calendar-dark .react-calendar__tile--active {
-					background: #2563eb;
-					color: white;
-				}
-			`}</style>
 		</div>
 	);
 };
+
 
 export function JournalEntryEditor({
 	entry,
@@ -438,7 +477,7 @@ export function JournalEntryEditor({
 			<div className='px-6 py-4 border-b border-slate-200 bg-slate-50 flex items-center justify-between relative z-20'>
 				<button
 					onClick={onCancel}
-					className='flex items-center gap-2 text-slate-600 hover:text-slate-800 transition-colors cursor-pointer'
+					className='cursor-pointer flex items-center gap-2 text-slate-600 hover:text-slate-800 transition-colors cursor-pointer'
 				>
 					<ArrowLeft size={20} />
 					<span className='text-sm font-medium'>Back</span>
@@ -448,7 +487,12 @@ export function JournalEntryEditor({
 				<div className="absolute left-1/2 -translate-x-1/2">
 					<button 
 						onClick={() => setShowDatePicker(!showDatePicker)}
-						className="text-sm font-medium text-slate-600 hover:text-slate-900 transition-colors"
+						className={clsx(
+							"text-sm font-medium transition-colors px-2 py-1 rounded-md",
+							showDatePicker 
+								? "text-slate-900 bg-slate-100 ring-1 ring-slate-900/10" 
+								: "text-slate-600 hover:text-slate-900 hover:bg-slate-50"
+						)}
 					>
 						{formattedDate}
 					</button>
@@ -519,7 +563,7 @@ export function JournalEntryEditor({
 						type='text'
 						value={title}
 						onChange={(e) => setTitle(e.target.value)}
-						placeholder='Enter journal entry title...'
+						placeholder='Title...'
 						className='w-full px-4 py-2 text-xl font-semibold border-none focus:outline-none focus:ring-0 placeholder:text-slate-400 text-slate-800'
 					/>
 				</div>

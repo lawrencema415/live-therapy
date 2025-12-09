@@ -48,8 +48,10 @@ export function JournalEntryCard({ entry, onDeleted }: JournalEntryCardProps) {
 		setShowDeleteConfirm(false);
 	};
 
-	const preview = entry.content.substring(0, 150);
-	const hasMore = entry.content.length > 150;
+	// Strip HTML tags for preview
+	const strippedContent = entry.content.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+	const preview = strippedContent.substring(0, 150);
+	const hasMore = strippedContent.length > 150;
 	const date = new Date(entry.created_at);
 	const formattedDate = date.toLocaleDateString('en-US', {
 		month: 'short',
