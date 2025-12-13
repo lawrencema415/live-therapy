@@ -60,7 +60,7 @@ export function JournalSidebar({ isOpen }: JournalSidebarProps) {
 			`}
 		>
 			{/* Logo/Brand */}
-			<div className='px-6 py-3 border-b border-slate-200'>
+			<div className='px-6 py-3.5 border-b border-slate-200'>
 				<h2 className='text-xl font-bold text-slate-800'>LiveTherapy</h2>
 			</div>
 

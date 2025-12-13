@@ -14,7 +14,7 @@ import {
 export default function NewJournalEntryPage() {
 	const router = useRouter();
 	const [isSaving, setIsSaving] = useState(false);
-	const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+	const [isSidebarOpen] = useState(() => {
 		// Initialize from localStorage (client-side only)
 		if (typeof window !== 'undefined') {
 			const saved = localStorage.getItem('journal-sidebar-open');
