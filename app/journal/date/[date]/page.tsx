@@ -20,15 +20,20 @@ export default function JournalDatePage() {
 	const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
-	const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
-	// Load sidebar state from localStorage
-	useEffect(() => {
+	const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+		// Initialize from localStorage
 		const saved = localStorage.getItem('journal-sidebar-open');
-		if (saved !== null) {
-			setIsSidebarOpen(saved === 'true');
-		}
-	}, []);
+		return saved !== null ? saved === 'true' : true;
+	});
+
+	// Save sidebar state to localStorage
+	const toggleSidebar = () => {
+		setIsSidebarOpen(prev => {
+			const newValue = !prev;
+			localStorage.setItem('journal-sidebar-open', String(newValue));
+			return newValue;
+		});
+	};
 
 	useEffect(() => {
 		loadEntries();
@@ -119,6 +124,8 @@ export default function JournalDatePage() {
 										entries={entries}
 										selectedEntryId={selectedEntryId || undefined}
 										onSelectEntry={setSelectedEntryId}
+										onToggleSidebar={toggleSidebar}
+										isSidebarOpen={isSidebarOpen}
 									/>
 								</div>
 

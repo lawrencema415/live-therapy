@@ -2,13 +2,15 @@
 
 import { useMemo } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, Calendar, MapPin } from 'lucide-react';
+import { ArrowLeft, Calendar, MapPin, Menu } from 'lucide-react';
 import type { JournalEntry } from '@/utils/supabaseDatabase';
 
 interface JournalEntryListProps {
 	entries: JournalEntry[];
 	selectedEntryId?: string;
 	onSelectEntry: (entryId: string) => void;
+	onToggleSidebar?: () => void;
+	isSidebarOpen?: boolean;
 }
 
 interface GroupedEntries {
@@ -16,7 +18,7 @@ interface GroupedEntries {
 	entries: JournalEntry[];
 }
 
-export function JournalEntryList({ entries, selectedEntryId, onSelectEntry }: JournalEntryListProps) {
+export function JournalEntryList({ entries, selectedEntryId, onSelectEntry, onToggleSidebar, isSidebarOpen }: JournalEntryListProps) {
 	const router = useRouter();
 	// Group entries by month/year
 	const groupedEntries = useMemo(() => {
@@ -59,13 +61,25 @@ export function JournalEntryList({ entries, selectedEntryId, onSelectEntry }: Jo
 		<div className="h-full flex flex-col bg-white border-r border-slate-200">
 			{/* Header */}
 			<div className="shrink-0 p-4 border-b border-slate-200 flex items-center justify-between">
-				<div>
-					<h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">
-						All Entries
-					</h2>
-					<p className="text-xs text-slate-500 mt-1">
-						{entries.length} {entries.length === 1 ? 'entry' : 'entries'}
-					</p>
+				<div className="flex items-center gap-2">
+					{onToggleSidebar && (
+						<button
+							onClick={onToggleSidebar}
+							className='flex items-center justify-center w-8 h-8 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 transition-all cursor-pointer'
+							aria-label='Toggle sidebar'
+							title='Toggle sidebar'
+						>
+							<Menu size={16} />
+						</button>
+					)}
+					<div>
+						<h2 className="text-sm font-semibold text-slate-700 uppercase tracking-wider">
+							All Entries
+						</h2>
+						<p className="text-xs text-slate-500 mt-1">
+							{entries.length} {entries.length === 1 ? 'entry' : 'entries'}
+						</p>
+					</div>
 				</div>
 				<button
 					onClick={() => router.push('/journal')}

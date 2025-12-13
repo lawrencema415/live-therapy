@@ -18,15 +18,11 @@ export default function JournalPage() {
 	const [entries, setEntries] = useState<JournalEntry[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
-	const [isSidebarOpen, setIsSidebarOpen] = useState(true);
-
-	// Load sidebar state from localStorage
-	useEffect(() => {
+	const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+		// Initialize from localStorage
 		const saved = localStorage.getItem('journal-sidebar-open');
-		if (saved !== null) {
-			setIsSidebarOpen(saved === 'true');
-		}
-	}, []);
+		return saved !== null ? saved === 'true' : true;
+	});
 
 	// Save sidebar state to localStorage
 	const toggleSidebar = () => {
