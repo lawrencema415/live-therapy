@@ -10,34 +10,22 @@ interface CustomCalendarProps {
 	onDateClick?: (date: Date) => void;
 }
 
-interface DateEntry {
-	date: Date;
-	entry: JournalEntry;
-	thumbnail?: string;
-}
 
 export function CustomCalendar({ entries, onDateClick }: CustomCalendarProps) {
 	const router = useRouter();
 	const [currentDate, setCurrentDate] = useState(new Date());
 
-	// Group entries by date and get latest entry with thumbnail for each date
+	// Group entries by date
 	const entriesByDate = useMemo(() => {
-		const map = new Map<string, DateEntry>();
+		const map = new Map<string, JournalEntry[]>();
 
 		entries.forEach((entry) => {
-			const entryDate = new Date(entry.created_at);
-			const dateKey = entryDate.toDateString();
-
-			const thumbnail = entry.images && entry.images.length > 0 ? entry.images[0] : undefined;
-
-			const existing = map.get(dateKey);
-			if (!existing || new Date(entry.created_at) > new Date(existing.entry.created_at)) {
-				map.set(dateKey, {
-					date: entryDate,
-					entry,
-					thumbnail,
-				});
-			}
+			const dateKey = new Date(entry.created_at).toDateString();
+			const existing = map.get(dateKey) || [];
+			existing.push(entry);
+			// Sort by creation time (newest first)
+			existing.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
+			map.set(dateKey, existing);
 		});
 
 		return map;
@@ -45,9 +33,9 @@ export function CustomCalendar({ entries, onDateClick }: CustomCalendarProps) {
 
 	const handleDateClick = (date: Date) => {
 		const dateKey = date.toDateString();
-		const hasEntries = entriesByDate.has(dateKey);
+		const dailyEntries = entriesByDate.get(dateKey);
 
-		if (!hasEntries) return;
+		if (!dailyEntries || dailyEntries.length === 0) return;
 
 		if (onDateClick) {
 			onDateClick(date);
@@ -106,6 +94,10 @@ export function CustomCalendar({ entries, onDateClick }: CustomCalendarProps) {
 	const today = new Date();
 	today.setHours(0, 0, 0, 0);
 
+	// Calculate number of weeks to determine row height distribution
+	const totalDays = days.length;
+	const weeks = Math.ceil(totalDays / 7);
+
 	return (
 		<div className='w-full h-full flex flex-col min-h-0 overflow-hidden'>
 			{/* Navigation */}
@@ -113,14 +105,14 @@ export function CustomCalendar({ entries, onDateClick }: CustomCalendarProps) {
 				<div className='flex items-center gap-2'>
 					<button
 						onClick={() => navigateYear(-1)}
-						className='p-2 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer'
+						className='p-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer'
 						aria-label='Previous year'
 					>
 						<ChevronsLeft size={20} />
 					</button>
 					<button
 						onClick={() => navigateMonth(-1)}
-						className='p-2 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer'
+						className='p-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer'
 						aria-label='Previous month'
 					>
 						<ChevronLeft size={20} />
@@ -130,14 +122,14 @@ export function CustomCalendar({ entries, onDateClick }: CustomCalendarProps) {
 				<div className='flex items-center gap-2'>
 					<button
 						onClick={() => navigateMonth(1)}
-						className='p-2 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer'
+						className='p-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer'
 						aria-label='Next month'
 					>
 						<ChevronRight size={20} />
 					</button>
 					<button
 						onClick={() => navigateYear(1)}
-						className='p-2 rounded-lg hover:bg-slate-100 transition-colors cursor-pointer'
+						className='p-2 rounded-lg hover:bg-slate-100 text-slate-600 hover:text-slate-900 transition-colors cursor-pointer'
 						aria-label='Next year'
 					>
 						<ChevronsRight size={20} />
@@ -146,11 +138,11 @@ export function CustomCalendar({ entries, onDateClick }: CustomCalendarProps) {
 			</div>
 
 			{/* Weekday Headers */}
-			<div className='grid grid-cols-7 gap-1 mb-2 flex-shrink-0'>
+			<div className='grid grid-cols-7 gap-4 mb-2 flex-shrink-0 px-1'>
 				{weekDays.map((day) => (
 					<div
 						key={day}
-						className='text-center text-xs font-semibold text-slate-600 py-1'
+						className='text-center text-xs font-semibold text-slate-500 uppercase tracking-wider'
 					>
 						{day}
 					</div>
@@ -158,49 +150,92 @@ export function CustomCalendar({ entries, onDateClick }: CustomCalendarProps) {
 			</div>
 
 			{/* Calendar Grid */}
-			<div className='grid grid-cols-7 gap-1 flex-1 min-h-0 overflow-hidden'>
+			<div 
+				className='grid grid-cols-7 gap-2 flex-1 min-h-0 p-1'
+				style={{ gridTemplateRows: `repeat(${weeks}, minmax(0, 1fr))` }}
+			>
 				{days.map((date, index) => {
 					if (!date) {
 						return <div key={`empty-${index}`} className='min-h-0' />;
 					}
 
 					const dateKey = date.toDateString();
-					const dateEntry = entriesByDate.get(dateKey);
+					const dailyEntries = entriesByDate.get(dateKey);
 					const isToday = date.toDateString() === today.toDateString();
 					const isWeekend = date.getDay() === 0 || date.getDay() === 6;
-					const hasEntry = entriesByDate.has(dateKey);
+					const hasEntries = dailyEntries && dailyEntries.length > 0;
+
+					// Find the first entry with a thumbnail
+					const entryWithThumbnail = dailyEntries?.find(e => e.images && e.images.length > 0);
+					const thumbnail = entryWithThumbnail?.images[0];
 
 					return (
 						<button
 							key={dateKey}
 							onClick={() => handleDateClick(date)}
-							disabled={!hasEntry}
+							disabled={!hasEntries}
 							className={`
-								relative rounded-lg border transition-all duration-200
-								${isToday ? 'bg-blue-100 border-blue-300' : 'bg-white border-slate-200'}
-								${hasEntry ? 'hover:bg-blue-50 hover:border-blue-300 cursor-pointer' : 'cursor-default opacity-50'}
-								${isWeekend ? 'text-red-600' : 'text-slate-800'}
-								flex flex-col items-center justify-start p-1 overflow-hidden
-								min-h-0
+								relative rounded-xl border transition-all duration-300 w-full h-full
+								${isToday ? 'border-blue-500 ring-2 ring-blue-500/20 shadow-lg shadow-blue-500/10' : 'border-slate-200 shadow-sm hover:shadow-md'}
+								${hasEntries ? 'cursor-pointer hover:border-blue-300 hover:-translate-y-0.5' : 'cursor-default'}
+								${!thumbnail && hasEntries ? 'bg-white hover:bg-slate-50' : 'bg-white'}
+								${!thumbnail && !hasEntries && 'bg-slate-50/50 opacity-60'}
+								flex flex-col items-start justify-start p-2 overflow-hidden group
 							`}
-							style={{ aspectRatio: '1' }}
-							aria-label={`${date.toLocaleDateString()}${hasEntry ? ' - Has entries' : ''}`}
+							aria-label={`${date.toLocaleDateString()}${hasEntries ? ` - ${dailyEntries.length} entries` : ''}`}
 						>
-							<span className={`text-xs sm:text-sm font-medium z-10 ${isToday ? 'text-blue-700' : ''}`}>
-								{date.getDate()}
-							</span>
-							{dateEntry?.thumbnail && (
-								<div className='w-full flex-1 min-h-0 mt-0.5 rounded overflow-hidden border border-slate-200'>
+							{/* Background Thumbnail */}
+							{thumbnail && (
+								<div className="absolute inset-0 z-0">
 									<img
-										src={dateEntry.thumbnail}
-										alt={dateEntry.entry.title}
-										className='w-full h-full object-cover'
+										src={thumbnail}
+										alt="Day thumbnail"
+										className="w-full h-full object-cover transition-transform duration-700 group-hover:scale-110"
 									/>
+									<div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/40 to-black/30 group-hover:bg-black/50 transition-colors duration-300" />
 								</div>
 							)}
-							{dateEntry && !dateEntry.thumbnail && (
-								<div className='w-2 h-2 bg-blue-500 rounded-full mt-1'></div>
-							)}
+
+							{/* Content Container */}
+							<div className="relative z-10 w-full h-full flex flex-col pointer-events-none">
+								{/* Date Number */}
+								<div className="flex justify-between items-start w-full mb-1">
+									<span className={`
+										text-sm font-bold w-7 h-7 flex items-center justify-center rounded-full shrink-0 transition-colors
+										${thumbnail ? 'text-white' : (isToday ? 'bg-blue-600 text-white' : (isWeekend ? 'text-red-500' : 'text-slate-700'))}
+									`}>
+										{date.getDate()}
+									</span>
+								</div>
+								
+								{/* Entries List - Flexible Spacer puts this at bottom or top depending on preference, 
+								    but keeping it normally flowed is standard. Using flex-1 to push down if needed, 
+									but currently simpler to just flow.
+								*/}
+								{hasEntries && (
+									<div className="w-full flex flex-col gap-1 overflow-hidden pointer-events-auto">
+										{dailyEntries.slice(0, 2).map((entry) => (
+											<div 
+												key={entry.id} 
+												className={`
+													text-[10px] sm:text-xs truncate w-full px-2 py-0.5 rounded-md font-medium transition-colors text-left
+													${thumbnail ? 'text-white/95 bg-white/15 backdrop-blur-sm border border-white/10' : 'text-slate-600 bg-slate-100 hover:bg-slate-200 border border-slate-200'}
+												`}
+											>
+												{entry.title || 'Untitled'}
+											</div>
+										))}
+										{dailyEntries.length > 2 && (
+											<div className={`
+												text-[10px] font-semibold px-1 text-left
+												${thumbnail ? 'text-white/70' : 'text-slate-400'}
+											`}>
+												+{dailyEntries.length - 2} more
+											</div>
+										)}
+									</div>
+								)}
+							</div>
 						</button>
 					);
 				})}

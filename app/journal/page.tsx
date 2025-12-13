@@ -86,8 +86,7 @@ export default function JournalPage() {
 									className='flex items-center gap-2 bg-[#191919] hover:bg-black active:bg-neutral-800 text-white font-semibold py-2 px-4 rounded-lg transition-all duration-200 shadow-sm hover:shadow-md focus:outline-none focus:ring-2 focus:ring-neutral-500 focus:ring-offset-2 cursor-pointer'
 									aria-label='Create new journal entry'
 								>
-									<span className='hidden sm:inline whitespace-nowrap'>New Entry</span>
-									<span className='sm:hidden'>New</span>
+									<Plus size={20} />
 								</button>
 							</div>
 						</div>
