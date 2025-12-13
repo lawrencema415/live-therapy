@@ -1,7 +1,7 @@
 'use client';
 
 import { useState, useEffect, useRef } from 'react';
-import { ArrowLeft, Image as ImageIcon, X, Upload, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, CheckSquare, Quote, Heading1, Heading2, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Clock } from 'lucide-react';
+import { ArrowLeft, Image as ImageIcon, X, Bold, Italic, Underline as UnderlineIcon, List, ListOrdered, CheckSquare, Quote, Heading1, Heading2, ChevronLeft, ChevronRight } from 'lucide-react';
 import { useEditor, EditorContent } from '@tiptap/react';
 import StarterKit from '@tiptap/starter-kit';
 import TaskList from '@tiptap/extension-task-list';
@@ -9,6 +9,8 @@ import TaskItem from '@tiptap/extension-task-item';
 import Underline from '@tiptap/extension-underline';
 import Placeholder from '@tiptap/extension-placeholder';
 import clsx from 'clsx';
+import SlashCommand, { slashCommandConfig } from './SlashCommand';
+import './styles.css';
 
 import {
 	type JournalEntry,
@@ -31,103 +33,88 @@ const MenuBar = ({ editor }: { editor: any }) => {
 		return null;
 	}
 
+	const menuItems = [
+		{
+			icon: Bold,
+			title: 'Bold',
+			action: () => editor.chain().focus().toggleBold().run(),
+			isActive: () => editor.isActive('bold'),
+		},
+		{
+			icon: Italic,
+			title: 'Italic',
+			action: () => editor.chain().focus().toggleItalic().run(),
+			isActive: () => editor.isActive('italic'),
+		},
+		{
+			icon: UnderlineIcon,
+			title: 'Underline',
+			action: () => editor.chain().focus().toggleUnderline().run(),
+			isActive: () => editor.isActive('underline'),
+		},
+		{ type: 'divider' },
+		{
+			icon: Heading1,
+			title: 'Heading 1',
+			action: () => editor.chain().focus().toggleHeading({ level: 1 }).run(),
+			isActive: () => editor.isActive('heading', { level: 1 }),
+		},
+		{
+			icon: Heading2,
+			title: 'Heading 2',
+			action: () => editor.chain().focus().toggleHeading({ level: 2 }).run(),
+			isActive: () => editor.isActive('heading', { level: 2 }),
+		},
+		{ type: 'divider' },
+		{
+			icon: List,
+			title: 'Bullet List',
+			action: () => editor.chain().focus().toggleBulletList().run(),
+			isActive: () => editor.isActive('bulletList'),
+		},
+		{
+			icon: ListOrdered,
+			title: 'Ordered List',
+			action: () => editor.chain().focus().toggleOrderedList().run(),
+			isActive: () => editor.isActive('orderedList'),
+		},
+		{
+			icon: CheckSquare,
+			title: 'Task List',
+			action: () => editor.chain().focus().toggleTaskList().run(),
+			isActive: () => editor.isActive('taskList'),
+		},
+		{ type: 'divider' },
+		{
+			icon: Quote,
+			title: 'Quote',
+			action: () => editor.chain().focus().toggleBlockquote().run(),
+			isActive: () => editor.isActive('blockquote'),
+		},
+	];
+
 	return (
 		<div className="flex flex-wrap gap-1 p-2">
-			<button
-				onClick={() => editor.chain().focus().toggleBold().run()}
-				disabled={!editor.can().chain().focus().toggleBold().run()}
-				className={clsx(
-					"p-2 rounded hover:bg-slate-200 transition-colors",
-					editor.isActive('bold') ? 'bg-slate-200 text-slate-900' : 'text-slate-600'
-				)}
-				title="Bold"
-			>
-				<Bold size={18} />
-			</button>
-			<button
-				onClick={() => editor.chain().focus().toggleItalic().run()}
-				disabled={!editor.can().chain().focus().toggleItalic().run()}
-				className={clsx(
-					"p-2 rounded hover:bg-slate-200 transition-colors",
-					editor.isActive('italic') ? 'bg-slate-200 text-slate-900' : 'text-slate-600'
-				)}
-				title="Italic"
-			>
-				<Italic size={18} />
-			</button>
-			<button
-				onClick={() => editor.chain().focus().toggleUnderline().run()}
-				className={clsx(
-					"p-2 rounded hover:bg-slate-200 transition-colors",
-					editor.isActive('underline') ? 'bg-slate-200 text-slate-900' : 'text-slate-600'
-				)}
-				title="Underline"
-			>
-				<UnderlineIcon size={18} />
-			</button>
-			<div className="w-px h-6 bg-slate-300 mx-1 self-center" />
-			<button
-				onClick={() => editor.chain().focus().toggleHeading({ level: 1 }).run()}
-				className={clsx(
-					"p-2 rounded hover:bg-slate-200 transition-colors",
-					editor.isActive('heading', { level: 1 }) ? 'bg-slate-200 text-slate-900' : 'text-slate-600'
-				)}
-				title="Heading 1"
-			>
-				<Heading1 size={18} />
-			</button>
-			<button
-				onClick={() => editor.chain().focus().toggleHeading({ level: 2 }).run()}
-				className={clsx(
-					"p-2 rounded hover:bg-slate-200 transition-colors",
-					editor.isActive('heading', { level: 2 }) ? 'bg-slate-200 text-slate-900' : 'text-slate-600'
-				)}
-				title="Heading 2"
-			>
-				<Heading2 size={18} />
-			</button>
-			<div className="w-px h-6 bg-slate-300 mx-1 self-center" />
-			<button
-				onClick={() => editor.chain().focus().toggleBulletList().run()}
-				className={clsx(
-					"p-2 rounded hover:bg-slate-200 transition-colors",
-					editor.isActive('bulletList') ? 'bg-slate-200 text-slate-900' : 'text-slate-600'
-				)}
-				title="Bullet List"
-			>
-				<List size={18} />
-			</button>
-			<button
-				onClick={() => editor.chain().focus().toggleOrderedList().run()}
-				className={clsx(
-					"p-2 rounded hover:bg-slate-200 transition-colors",
-					editor.isActive('orderedList') ? 'bg-slate-200 text-slate-900' : 'text-slate-600'
-				)}
-				title="Ordered List"
-			>
-				<ListOrdered size={18} />
-			</button>
-			<button
-				onClick={() => editor.chain().focus().toggleTaskList().run()}
-				className={clsx(
-					"p-2 rounded hover:bg-slate-200 transition-colors",
-					editor.isActive('taskList') ? 'bg-slate-200 text-slate-900' : 'text-slate-600'
-				)}
-				title="Task List"
-			>
-				<CheckSquare size={18} />
-			</button>
-			<div className="w-px h-6 bg-slate-300 mx-1 self-center" />
-			<button
-				onClick={() => editor.chain().focus().toggleBlockquote().run()}
-				className={clsx(
-					"p-2 rounded hover:bg-slate-200 transition-colors",
-					editor.isActive('blockquote') ? 'bg-slate-200 text-slate-900' : 'text-slate-600'
-				)}
-				title="Quote"
-			>
-				<Quote size={18} />
-			</button>
+			{menuItems.map((item, index) => {
+				if (item.type === 'divider') {
+					return <div key={index} className="w-px h-6 bg-slate-300 mx-1 self-center" />;
+				}
+
+				const Icon = item.icon;
+				return (
+					<button
+						key={index}
+						onClick={item.action}
+						className={clsx(
+							"p-2 rounded hover:bg-slate-200 transition-colors cursor-pointer",
+							item.isActive?.() ? 'bg-slate-200 text-slate-900' : 'text-slate-600'
+						)}
+						title={item.title}
+					>
+						{Icon && <Icon size={18} />}
+					</button>
+				);
+			})}
 		</div>
 	)
 }
@@ -380,8 +367,18 @@ export function JournalEntryEditor({
 				nested: true,
 			}),
 			Placeholder.configure({
-				placeholder: 'Write your thoughts here...',
-			}),
+				placeholder: ({ node, editor }) => {
+					if (editor.isEmpty) {
+						return 'Write your thoughts here...';
+					}
+					if (node.type.name === 'paragraph') {
+						return "Press '/' for quick formatting..";
+					}
+					return 'Write your thoughts here...';
+				},
+				includeChildren: true,
+			}) as any,
+			SlashCommand.configure(slashCommandConfig) as any,
 		],
 		content: entry?.content || '',
 		editorProps: {
@@ -581,75 +578,6 @@ export function JournalEntryEditor({
 				</div>
 			</div>
 			
-			<style jsx global>{`
-				.ProseMirror {
-					min-height: 100%;
-				}
-				.ProseMirror:focus {
-					outline: none;
-				}
-				.ProseMirror p.is-editor-empty:first-child::before {
-					color: #cbd5e1;
-					content: attr(data-placeholder);
-					float: left;
-					height: 0;
-					pointer-events: none;
-				}
-				/* ... existing styles ... */
-				.ProseMirror ul {
-					list-style-type: disc;
-					padding-left: 1.5em;
-				}
-				.ProseMirror ol {
-					list-style-type: decimal;
-					padding-left: 1.5em;
-				}
-				.ProseMirror ul[data-type="taskList"] {
-					list-style: none;
-					padding: 0;
-				}
-				.ProseMirror ul[data-type="taskList"] li {
-					display: flex;
-					align-items: flex-start;
-					margin-bottom: 0.5em;
-				}
-				.ProseMirror ul[data-type="taskList"] li > label {
-					margin-right: 0.5em;
-					user-select: none;
-					margin-top: 0.1em;
-				}
-				.ProseMirror ul[data-type="taskList"] li > div {
-					flex: 1;
-				}
-				.ProseMirror h1 {
-					font-size: 1.875em;
-					font-weight: 800;
-					margin-top: 1.5em;
-					margin-bottom: 0.75em;
-					line-height: 1.2;
-					color: #1e293b;
-				}
-				.ProseMirror h2 {
-					font-size: 1.5em;
-					font-weight: 700;
-					margin-top: 1.25em;
-					margin-bottom: 0.5em;
-					line-height: 1.3;
-					color: #334155;
-				}
-				.ProseMirror p {
-					margin-bottom: 1em;
-					line-height: 1.75;
-				}
-				.ProseMirror blockquote {
-					border-left: 4px solid #e2e8f0;
-					padding-left: 1em;
-					margin-left: 0;
-					margin-right: 0;
-					font-style: italic;
-					color: #64748b;
-				}
-			`}</style>
 		</div>
 	);
 }
