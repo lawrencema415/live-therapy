@@ -2,7 +2,7 @@
 
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { BookOpen, Calendar, LogOut, BarChart3 } from 'lucide-react';
+import { BookOpen, LogOut, BarChart3, PersonStanding } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
 import { createClient } from '@/utils/supabase/client';
 import { useRouter } from 'next/navigation';
@@ -34,7 +34,7 @@ export function JournalSidebar({ isOpen }: JournalSidebarProps) {
 		{
 			name: 'Therapy',
 			href: '/therapy',
-			icon: Calendar,
+			icon: PersonStanding,
 			active: isActive('/therapy'),
 		},
 		{
