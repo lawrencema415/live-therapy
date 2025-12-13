@@ -10,7 +10,7 @@ import {
 } from '@/utils/supabaseDatabase';
 import { JournalSidebar } from '@/components/journal/JournalSidebar';
 import { JournalCalendar } from '@/components/journal/JournalCalendar';
-import { Plus, BookOpen, AlertCircle, RefreshCw } from 'lucide-react';
+import { Plus, BookOpen, AlertCircle, RefreshCw, Menu } from 'lucide-react';
 
 export default function JournalPage() {
 	const { user, loading: authLoading } = useAuth();
@@ -18,6 +18,24 @@ export default function JournalPage() {
 	const [entries, setEntries] = useState<JournalEntry[]>([]);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+	// Load sidebar state from localStorage
+	useEffect(() => {
+		const saved = localStorage.getItem('journal-sidebar-open');
+		if (saved !== null) {
+			setIsSidebarOpen(saved === 'true');
+		}
+	}, []);
+
+	// Save sidebar state to localStorage
+	const toggleSidebar = () => {
+		setIsSidebarOpen(prev => {
+			const newValue = !prev;
+			localStorage.setItem('journal-sidebar-open', String(newValue));
+			return newValue;
+		});
+	};
 
 	useEffect(() => {
 		if (!authLoading && user) {
@@ -63,22 +81,25 @@ export default function JournalPage() {
 		<ProtectedRoute>
 			<div className='h-screen flex overflow-hidden bg-slate-50'>
 				{/* Sidebar */}
-				<JournalSidebar />
+				<JournalSidebar isOpen={isSidebarOpen} />
 
 				{/* Main Content */}
 				<div className='flex-1 flex flex-col overflow-hidden'>
 					{/* Header */}
-					<div className='shrink-0 px-4 sm:px-6 py-4 sm:py-6 bg-white border-b border-slate-200 shadow-sm'>
+					<div className='shrink-0 px-4 sm:px-6 py-2 bg-white border-b border-slate-200'>
 						<div className='flex items-center justify-between gap-4'>
-							<div className='min-w-0 flex-1'>
+							<div className='min-w-0 flex-1 flex items-center gap-3'>
+								<button
+									onClick={toggleSidebar}
+									className='flex items-center justify-center w-10 h-10 rounded-lg border border-slate-300 bg-white hover:bg-slate-50 text-slate-700 hover:text-slate-900 transition-all cursor-pointer'
+									aria-label='Toggle sidebar'
+									title='Toggle sidebar'
+								>
+									<Menu size={20} />
+								</button>
 								<h1 className='text-2xl sm:text-3xl font-bold text-slate-800 truncate'>
 									Journal
 								</h1>
-								<p className='text-sm text-slate-600 mt-1'>
-									{entries.length > 0
-										? `${entries.length} ${entries.length === 1 ? 'entry' : 'entries'}`
-										: 'Your personal reflection space'}
-								</p>
 							</div>
 							<div className='flex items-center gap-2 shrink-0'>
 								<button

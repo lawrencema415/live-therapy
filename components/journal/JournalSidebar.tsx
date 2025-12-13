@@ -1,46 +1,66 @@
 'use client';
 
 import Link from 'next/link';
-import { usePathname, useRouter } from 'next/navigation';
-import { Home, LayoutDashboard, BookOpen, LogOut } from 'lucide-react';
+import { usePathname } from 'next/navigation';
+import { BookOpen, Calendar, LogOut, BarChart3 } from 'lucide-react';
 import { useAuth } from '@/contexts/AuthContext';
+import { createClient } from '@/utils/supabase/client';
+import { useRouter } from 'next/navigation';
 
-export function JournalSidebar() {
+interface JournalSidebarProps {
+	isOpen: boolean;
+}
+
+export function JournalSidebar({ isOpen }: JournalSidebarProps) {
 	const pathname = usePathname();
 	const router = useRouter();
-	const { signOut } = useAuth();
+	const { signOut, user } = useAuth();
 
 	const handleLogout = async () => {
 		try {
-			await signOut();
-			router.push('/');
+			const supabase = createClient();
+			await supabase.auth.signOut();
+			router.push('/auth/login');
 		} catch (error) {
 			console.error('Failed to sign out:', error);
 		}
 	};
 
+	const isActive = (path: string) => {
+		return pathname === path || pathname?.startsWith(path + '/');
+	};
+
 	const navItems = [
 		{
+			name: 'Therapy',
 			href: '/therapy',
-			label: 'Therapy',
-			icon: Home,
+			icon: Calendar,
+			active: isActive('/therapy'),
 		},
 		{
-			href: '/dashboard',
-			label: 'Dashboard',
-			icon: LayoutDashboard,
-		},
-		{
+			name: 'Journal',
 			href: '/journal',
-			label: 'Journal',
 			icon: BookOpen,
+			active: isActive('/journal'),
+		},
+		{
+			name: 'Dashboard',
+			href: '/dashboard',
+			icon: BarChart3,
+			active: isActive('/dashboard'),
 		},
 	];
 
 	return (
-		<div className='w-64 shrink-0 bg-white border-r border-slate-200 flex flex-col'>
+		<div
+			className={`
+				${isOpen ? 'w-64' : 'w-0'} shrink-0 bg-white border-r border-slate-200 flex flex-col
+				transition-all duration-300 ease-in-out overflow-hidden
+				${isOpen ? 'translate-x-0' : '-translate-x-64'}
+			`}
+		>
 			{/* Logo/Brand */}
-			<div className='px-6 py-4 border-b border-slate-200'>
+			<div className='px-6 py-3 border-b border-slate-200'>
 				<h2 className='text-xl font-bold text-slate-800'>LiveTherapy</h2>
 			</div>
 
@@ -61,7 +81,7 @@ export function JournalSidebar() {
 									} focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1`}
 								>
 									<Icon size={20} />
-									<span>{item.label}</span>
+									<span>{item.name}</span>
 								</Link>
 							</li>
 						);

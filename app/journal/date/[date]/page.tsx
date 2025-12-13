@@ -20,6 +20,15 @@ export default function JournalDatePage() {
 	const [selectedEntryId, setSelectedEntryId] = useState<string | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
+	const [isSidebarOpen, setIsSidebarOpen] = useState(true);
+
+	// Load sidebar state from localStorage
+	useEffect(() => {
+		const saved = localStorage.getItem('journal-sidebar-open');
+		if (saved !== null) {
+			setIsSidebarOpen(saved === 'true');
+		}
+	}, []);
 
 	useEffect(() => {
 		loadEntries();
@@ -66,7 +75,7 @@ export default function JournalDatePage() {
 		<ProtectedRoute>
 			<div className='h-screen flex overflow-hidden bg-slate-50'>
 				{/* Sidebar */}
-				<JournalSidebar />
+				<JournalSidebar isOpen={isSidebarOpen} />
 
 				{/* Main Content */}
 				<div className='flex-1 flex flex-col overflow-hidden'>
