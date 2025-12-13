@@ -15,6 +15,11 @@ import {
 export default function NewJournalEntryPage() {
 	const router = useRouter();
 	const [isSaving, setIsSaving] = useState(false);
+	const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+		// Initialize from localStorage
+		const saved = localStorage.getItem('journal-sidebar-open');
+		return saved !== null ? saved === 'true' : true;
+	});
 
 	const handleSave = async (input: CreateJournalEntryInput | UpdateJournalEntryInput) => {
 		setIsSaving(true);
@@ -38,7 +43,7 @@ export default function NewJournalEntryPage() {
 	return (
 		<ProtectedRoute>
 			<div className='h-screen flex overflow-hidden bg-slate-50'>
-				<JournalSidebar />
+				<JournalSidebar isOpen={isSidebarOpen} />
 				<div className='flex-1 flex flex-col overflow-hidden'>
 					<JournalEntryEditor
 						onSave={handleSave}

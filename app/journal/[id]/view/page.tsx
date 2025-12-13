@@ -16,6 +16,11 @@ export default function ViewJournalEntryPage() {
 	const entryId = params.id as string;
 	const [entry, setEntry] = useState<JournalEntry | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
+	const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+		// Initialize from localStorage
+		const saved = localStorage.getItem('journal-sidebar-open');
+		return saved !== null ? saved === 'true' : true;
+	});
 
 	useEffect(() => {
 		if (entryId) {
@@ -75,7 +80,7 @@ export default function ViewJournalEntryPage() {
 	return (
 		<ProtectedRoute>
 			<div className='h-screen flex overflow-hidden bg-slate-50'>
-				<JournalSidebar />
+				<JournalSidebar isOpen={isSidebarOpen} />
 				<div className='flex-1 flex flex-col overflow-hidden'>
 					{/* Header */}
 					<div className='shrink-0 px-6 py-4 bg-white border-b border-slate-200'>

@@ -19,6 +19,11 @@ export default function EditJournalEntryPage() {
 	const [entry, setEntry] = useState<JournalEntry | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [isSaving, setIsSaving] = useState(false);
+	const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
+		// Initialize from localStorage
+		const saved = localStorage.getItem('journal-sidebar-open');
+		return saved !== null ? saved === 'true' : true;
+	});
 
 	useEffect(() => {
 		if (entryId) {
@@ -85,7 +90,7 @@ export default function EditJournalEntryPage() {
 	return (
 		<ProtectedRoute>
 			<div className='h-screen flex overflow-hidden bg-slate-50'>
-				<JournalSidebar />
+				<JournalSidebar isOpen={isSidebarOpen} />
 				<div className='flex-1 flex flex-col overflow-hidden'>
 					<JournalEntryEditor
 						entry={entry}
