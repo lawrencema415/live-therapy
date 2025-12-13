@@ -7,7 +7,6 @@ import { JournalSidebar } from '@/components/journal/JournalSidebar';
 import { JournalEntryEditor } from '@/components/journal/JournalEntryEditor';
 import {
 	createJournalEntry,
-	uploadJournalImage,
 	type CreateJournalEntryInput,
 	type UpdateJournalEntryInput,
 } from '@/utils/supabaseDatabase';
@@ -16,9 +15,12 @@ export default function NewJournalEntryPage() {
 	const router = useRouter();
 	const [isSaving, setIsSaving] = useState(false);
 	const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
-		// Initialize from localStorage
-		const saved = localStorage.getItem('journal-sidebar-open');
-		return saved !== null ? saved === 'true' : true;
+		// Initialize from localStorage (client-side only)
+		if (typeof window !== 'undefined') {
+			const saved = localStorage.getItem('journal-sidebar-open');
+			return saved !== null ? saved === 'true' : true;
+		}
+		return true;
 	});
 
 	const handleSave = async (input: CreateJournalEntryInput | UpdateJournalEntryInput) => {

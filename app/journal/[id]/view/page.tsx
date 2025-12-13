@@ -17,9 +17,12 @@ export default function ViewJournalEntryPage() {
 	const [entry, setEntry] = useState<JournalEntry | null>(null);
 	const [isLoading, setIsLoading] = useState(true);
 	const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
-		// Initialize from localStorage
-		const saved = localStorage.getItem('journal-sidebar-open');
-		return saved !== null ? saved === 'true' : true;
+		// Initialize from localStorage (client-side only)
+		if (typeof window !== 'undefined') {
+			const saved = localStorage.getItem('journal-sidebar-open');
+			return saved !== null ? saved === 'true' : true;
+		}
+		return true;
 	});
 
 	useEffect(() => {

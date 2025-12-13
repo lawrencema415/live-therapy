@@ -20,9 +20,12 @@ export default function EditJournalEntryPage() {
 	const [isLoading, setIsLoading] = useState(true);
 	const [isSaving, setIsSaving] = useState(false);
 	const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
-		// Initialize from localStorage
-		const saved = localStorage.getItem('journal-sidebar-open');
-		return saved !== null ? saved === 'true' : true;
+		// Initialize from localStorage (client-side only)
+		if (typeof window !== 'undefined') {
+			const saved = localStorage.getItem('journal-sidebar-open');
+			return saved !== null ? saved === 'true' : true;
+		}
+		return true;
 	});
 
 	useEffect(() => {

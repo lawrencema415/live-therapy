@@ -21,9 +21,12 @@ export default function JournalDatePage() {
 	const [isLoading, setIsLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 	const [isSidebarOpen, setIsSidebarOpen] = useState(() => {
-		// Initialize from localStorage
-		const saved = localStorage.getItem('journal-sidebar-open');
-		return saved !== null ? saved === 'true' : true;
+		// Initialize from localStorage (client-side only)
+		if (typeof window !== 'undefined') {
+			const saved = localStorage.getItem('journal-sidebar-open');
+			return saved !== null ? saved === 'true' : true;
+		}
+		return true;
 	});
 
 	// Save sidebar state to localStorage
